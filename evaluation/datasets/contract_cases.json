@@ -1,0 +1,452 @@
+[
+  {
+    "case_id": "CASE-001",
+    "title": "Standard Mutual Non-Disclosure Agreement",
+    "category": "normal",
+    "contract_text": "MUTUAL NON-DISCLOSURE AGREEMENT\nThis Mutual Non-Disclosure Agreement (\"Agreement\") is entered into as of October 1, 2026, by and between Apex Analytics Inc. (\"Disclosing Party\") and Zenith Data Systems Corp. (\"Receiving Party\").\n\nSection 1. Definition of Confidential Information. Confidential Information refers to non-public technical, commercial, or operational information disclosed by either party to the other.\n\nSection 2. Standard of Care. The Receiving Party agrees to protect Confidential Information using the same degree of care it uses for its own confidential materials, but not less than reasonable care.\n\nSection 3. Term and Return. This Agreement shall remain in effect for two (2) years. Upon written request, Receiving Party shall promptly return or destroy all tangible copies of Confidential Information.\n\nSection 4. Limitation of Liability. Neither party shall be liable for indirect, incidental, or consequential damages. Each party's aggregate liability under this Agreement shall not exceed fifty thousand dollars ($50,000).\n\nSection 5. Governing Law. This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware.",
+    "expected": {
+      "contract_type": "NDA",
+      "risk_level": "low",
+      "risk_categories": ["confidentiality"],
+      "obligations": ["safeguard_confidential_information", "return_or_destroy_materials"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-002",
+    "title": "Standard Enterprise SaaS Agreement",
+    "category": "normal",
+    "contract_text": "ENTERPRISE SOFTWARE-AS-A-SERVICE AGREEMENT\nThis SaaS Agreement is made effective November 1, 2026, between CloudScale Operations LLC (\"Vendor\") and Global Retail Partners Inc. (\"Customer\").\n\nSection 1. Subscription Services. Vendor grants Customer a non-exclusive, non-transferable subscription to access the CloudScale Platform during the Subscription Term.\n\nSection 2. Fees and Payment. Customer shall pay all subscription fees within thirty (30) days of invoice date. Late invoices accrue interest at 1.0% per month.\n\nSection 3. Service Level Commitment. Vendor warrants 99.9% monthly availability, excluding scheduled maintenance. Outages exceeding SLA thresholds qualify for service credits.\n\nSection 4. Limitation of Liability. Each party's total aggregate liability arising out of or related to this Agreement shall be limited to the total fees paid by Customer in the preceding twelve (12) months.\n\nSection 5. Term and Termination. The initial term is twelve (12) months. Either party may terminate for material breach upon thirty (30) days written notice and opportunity to cure.\n\nSection 6. Governing Law. This Agreement is governed by the laws of the State of California.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "low",
+      "risk_categories": ["payment", "sla"],
+      "obligations": ["pay_subscription_fees", "maintain_sla"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence", "negotiation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-003",
+    "title": "Professional IT Services Master Agreement",
+    "category": "normal",
+    "contract_text": "MASTER PROFESSIONAL SERVICES AGREEMENT\nEffective Date: December 1, 2026. Parties: Horizon Consulting Group (\"Consultant\") and First Bank Bancorp (\"Client\").\n\nSection 1. Scope of Work. Consultant shall provide IT infrastructure migration services as specified in Statement of Work (SOW) #1.\n\nSection 2. Invoicing. Consultant shall submit bi-weekly time and materials invoices. Client shall remit payment within Net 30 days.\n\nSection 3. Intellectual Property. All custom work product created specifically for Client shall constitute work-made-for-hire and belong exclusively to Client upon full payment.\n\nSection 4. Mutual Indemnification. Each party shall defend and indemnify the other against third-party claims arising from gross negligence or willful misconduct.\n\nSection 5. Limitation of Liability. Liability of both parties is mutually capped at the fees payable under the applicable SOW.\n\nSection 6. Governing Law. Laws of the State of New York.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "low",
+      "risk_categories": ["ip", "payment"],
+      "obligations": ["deliver_services", "remit_payment_net_30"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-004",
+    "title": "Executive Employment Agreement",
+    "category": "normal",
+    "contract_text": "EXECUTIVE EMPLOYMENT AGREEMENT\nBetween BioHealth Therapeutics Inc. (\"Company\") and Dr. Elena Rostova (\"Executive\"), dated October 15, 2026.\n\nSection 1. Position and Duties. Executive shall serve as Chief Scientific Officer, reporting to the Chief Executive Officer.\n\nSection 2. Compensation. Annual base salary of $380,000 paid semi-monthly, plus eligibility for a 40% performance bonus.\n\nSection 3. Termination Without Cause. Company may terminate Executive's employment without Cause upon sixty (60) days advance written notice, providing twelve (12) months base salary as severance.\n\nSection 4. Restrictive Covenants. Executive agrees to non-solicitation of employees and customers for twelve (12) months post-termination.\n\nSection 5. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Employment Agreement",
+      "risk_level": "low",
+      "risk_categories": ["termination", "severance"],
+      "obligations": ["pay_base_salary", "provide_notice", "abide_by_non_solicit"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "risk_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-005",
+    "title": "Commercial Hardware Supply Agreement",
+    "category": "normal",
+    "contract_text": "COMMERCIAL HARDWARE SUPPLY AGREEMENT\nParties: SolidState Microelectronics (\"Supplier\") and Industrial Robotics Corp (\"Buyer\"), effective January 1, 2027.\n\nSection 1. Purchase Orders. Buyer shall submit quarterly rolling forecasts and firm purchase orders with 45-day lead times.\n\nSection 2. Delivery and Acceptance. Delivery shall be FOB Destination. Buyer has fifteen (15) days to inspect and notify Supplier of defects.\n\nSection 3. Warranty. Supplier warrants hardware against manufacturing defects for eighteen (18) months from delivery.\n\nSection 4. Liability Cap. Aggregate liability under this Agreement is mutually capped at 100% of fees paid during the trailing 12 months.\n\nSection 5. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "low",
+      "risk_categories": ["warranty", "delivery"],
+      "obligations": ["submit_forecasts", "inspect_deliveries", "warranty_support"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "obligation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-006",
+    "title": "Asymmetric Uncapped Liability Agreement",
+    "category": "risk",
+    "contract_text": "CLOUD INFRASTRUCTURE HOSTING AGREEMENT\nEffective Date: October 1, 2026. Provider: SkyHost Global LLC. Customer: DataPrime Analytics Corp.\n\nSection 1. Hosting Services. SkyHost provides managed cloud hosting infrastructure.\n\nSection 2. Liability and Damage Allocation. Customer aggregate liability arising out of or related to this Agreement shall be completely uncapped without financial limitation. In contrast, SkyHost total cumulative liability for any and all claims, whether in contract, tort, or warranty, shall not exceed the fees paid by Customer in the preceding one (1) month.\n\nSection 3. Consequential Damages. Customer waives no rights to consequential damages against itself, but expressly releases SkyHost from all indirect, lost profit, or consequential damages.\n\nSection 4. Termination. Either party may terminate upon 30 days notice.\n\nSection 5. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["liability", "uncapped_liability"],
+      "obligations": ["pay_fees"],
+      "compliance_issues": ["RULE-001"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence", "negotiation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-007",
+    "title": "One-Sided Termination and Lock-in Agreement",
+    "category": "risk",
+    "contract_text": "STRATEGIC LOGISTICS PLATFORM AGREEMENT\nEffective Date: October 1, 2026. Vendor: OmniShip Systems Inc. Customer: Metro Cargo Logistics.\n\nSection 1. Services. Freight management software and dispatch tracking.\n\nSection 2. Commitment Term. Customer commits to a non-cancellable, non-terminable term of thirty-six (36) months.\n\nSection 3. Unilateral Vendor Termination. Vendor may terminate this Agreement at any time, with or without cause, upon three (3) days written email notice. Customer shall have no right of termination for convenience or cause, and early termination shall accelerate all 36 months of fees immediately.\n\nSection 4. Limitation of Liability. Mutual 12-month cap.\n\nSection 5. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "high",
+      "risk_categories": ["termination", "lock_in"],
+      "obligations": ["accelerate_remaining_fees"],
+      "compliance_issues": ["RULE-004"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-008",
+    "title": "Exorbitant Liquidated Damages Agreement",
+    "category": "risk",
+    "contract_text": "MANUFACTURING TOOLING AGREEMENT\nEffective Date: November 1, 2026. Manufacturer: Precision Molds Inc. Buyer: Delta Machinery Co.\n\nSection 1. Tooling Fabrication. Precision Molds shall fabricate custom injection molding dies.\n\nSection 2. Payment Terms. Invoices due within 15 days.\n\nSection 3. Liquidated Damages Penalty. If Buyer fails to remit payment within 15 days, Buyer shall pay liquidated damages equal to 500% of the overdue invoice amount per day, plus an automatic $250,000 administrative penalty fee, regardless of actual damages incurred.\n\nSection 4. Limitation of Liability. Buyer liability is unlimited for late payment penalties.\n\nSection 5. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "high",
+      "risk_categories": ["penalty", "liquidated_damages", "payment"],
+      "obligations": ["remit_payment_in_15_days"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "negotiation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-009",
+    "title": "Perpetual Automatic Renewal with Hidden Price Escalator",
+    "category": "risk",
+    "contract_text": "ENTERPRISE TELEMETRY SUBSCRIPTION AGREEMENT\nEffective Date: October 1, 2026. Vendor: SensorWave Global. Customer: NorthStar Energy Corp.\n\nSection 1. IoT Sensor Telemetry. Real-time pipeline monitoring platform.\n\nSection 2. Automatic Evergreen Renewal. This Agreement shall automatically renew for successive thirty-six (36) month terms unless Customer provides written certified notice of non-renewal at least one hundred eighty (180) days prior to the expiration of the current term.\n\nSection 3. Compounded Fee Escalation. Upon each renewal date, subscription fees shall automatically increase by twenty-five percent (25%) compounded annually without prior notice or right of objection.\n\nSection 4. Liability. Capped at $10,000.\n\nSection 5. Governing Law. State of New York.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "high",
+      "risk_categories": ["renewal", "auto_renewal", "pricing"],
+      "obligations": ["provide_180_day_opt_out_notice"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "obligation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-010",
+    "title": "Agreement with Missing Limitation of Liability",
+    "category": "risk",
+    "contract_text": "FACILITIES MANAGEMENT SERVICES AGREEMENT\nEffective Date: December 1, 2026. Provider: CleanFacility Services LLC. Client: Apex HQ Campus.\n\nSection 1. Janitorial Services. Daily maintenance of 200,000 sq ft office campus.\n\nSection 2. Compensation. Flat monthly fee of $25,000 paid monthly.\n\nSection 3. Indemnity. Client agrees to defend CleanFacility from all premises liability claims.\n\nSection 4. Entire Agreement. This contract contains the complete understanding of the parties. Note: There is no clause limiting direct, indirect, consequential, or aggregate liability for either party in this Agreement.\n\nSection 5. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "high",
+      "risk_categories": ["missing_liability_cap", "unlimited_exposure"],
+      "obligations": ["pay_monthly_fee"],
+      "compliance_issues": ["RULE-001"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-011",
+    "title": "Broad Unilateral Third-Party Indemnification",
+    "category": "risk",
+    "contract_text": "PAYMENT PROCESSING GATEWAY AGREEMENT\nEffective Date: October 1, 2026. Gateway: FastPay Network. Merchant: QuickBuy E-Commerce Inc.\n\nSection 1. Transaction Processing. FastPay processes credit card transactions.\n\nSection 2. Broad Unilateral Indemnification. Merchant shall defend, indemnify, and hold harmless FastPay, its affiliates, officers, and contractors against any and all losses, fines, claims, and legal fees arising from or related to any transaction, chargeback, or system security breach, including claims alleging FastPay's own gross negligence or systemic platform vulnerabilities, without limitation.\n\nSection 3. Limitation of Liability. FastPay liability is capped at $500.\n\nSection 4. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["indemnity", "unilateral_indemnity"],
+      "obligations": ["indemnify_fastpay"],
+      "compliance_issues": ["RULE-002"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence", "negotiation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-012",
+    "title": "Explicit Violation of RULE-001 (One-Month Fee Cap)",
+    "category": "compliance",
+    "contract_text": "CLOUD ANALYTICS SERVICE LEVEL AGREEMENT\nEffective Date: October 1, 2026. Vendor: QuantumMetrics AI. Customer: Pacific Health Group.\n\nSection 1. Cloud Analytics. Real-time patient telemetry analytics.\n\nSection 2. Fees. $10,000 monthly subscription fee.\n\nSection 3. Limitation of Liability. Notwithstanding anything to the contrary, Vendor aggregate liability under this Agreement shall not exceed the fees paid in the preceding one (1) month ($10,000), even in the event of gross negligence or data security failure.\n\nSection 4. Customer Liability. Customer liability remains subject to standard common law remedies.\n\nSection 5. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "high",
+      "risk_categories": ["liability", "compliance_violation"],
+      "obligations": ["pay_fees"],
+      "compliance_issues": ["RULE-001"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-013",
+    "title": "Explicit Violation of RULE-002 (Uncapped Third-Party Indemnity)",
+    "category": "compliance",
+    "contract_text": "MARKETING AUTOMATION SUBSCRIPTION AGREEMENT\nEffective Date: October 1, 2026. Provider: AdBlast Technologies. Customer: ConsumerDirect LLC.\n\nSection 1. Marketing Platform. Email and SMS campaign automation tools.\n\nSection 2. Customer Indemnification. Customer agrees to defend, indemnify, and hold harmless AdBlast against all third-party actions, regulatory penalties, and TCPA claims without financial limitation, regardless of whether AdBlast automated systems contributed to the non-compliance.\n\nSection 3. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["indemnity", "compliance_violation"],
+      "obligations": ["indemnify_adblast"],
+      "compliance_issues": ["RULE-002"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-014",
+    "title": "Explicit Violation of RULE-003 (Prohibited Foreign Governing Law)",
+    "category": "compliance",
+    "contract_text": "OFFSHORE DATA HOSTING AGREEMENT\nEffective Date: October 1, 2026. Vendor: IslandHost International. Customer: Sovereign Financial Inc.\n\nSection 1. Hosting Services. Colocation server hosting and power redundancy.\n\nSection 2. Mutual Liability Cap. Capped at 12 months fees paid.\n\nSection 3. Governing Law and Exclusive Venue. This Agreement shall be governed strictly by the substantive laws of the Cayman Islands. All disputes must be arbitrated in George Town, Cayman Islands under British West Indies commercial rules, explicitly excluding Delaware, New York, or California courts.\n\nSection 4. Term. 12 months.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "medium",
+      "risk_categories": ["governing_law", "compliance_violation"],
+      "obligations": ["pay_hosting_fees"],
+      "compliance_issues": ["RULE-003"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-015",
+    "title": "Explicit Violation of RULE-004 (10-Day Summary Termination)",
+    "category": "compliance",
+    "contract_text": "SUPPLY CHAIN DISPATCH AGREEMENT\nEffective Date: October 1, 2026. Dispatcher: RapidDispatch Inc. Carrier: ExpressFreight Lines.\n\nSection 1. Dispatch Operations. Scheduling and routing coordination.\n\nSection 2. Summary Termination for Convenience. Dispatcher reserves the right to terminate this Agreement immediately upon ten (10) days notice via email for any reason or no reason, with no opportunity for Carrier to cure alleged operational variances.\n\nSection 3. Limitation of Liability. Mutual 12-month trailing fees.\n\nSection 4. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "high",
+      "risk_categories": ["termination", "compliance_violation"],
+      "obligations": ["dispatch_vehicles"],
+      "compliance_issues": ["RULE-004"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-016",
+    "title": "Explicit Violation of RULE-005 (Customer Data AI Training Rights)",
+    "category": "compliance",
+    "contract_text": "AI COPILOT PLATFORM SERVICE AGREEMENT\nEffective Date: October 1, 2026. Provider: NeuroGen AI Systems. Customer: Enterprise Law Corp.\n\nSection 1. Generative AI Tools. Provision of legal document drafting copilot.\n\nSection 2. Data Rights and Model Training. Customer hereby grants Provider a perpetual, irrevocable, royalty-free worldwide license to use, reproduce, modify, and train machine learning models and foundational neural networks on all Customer Data, legal briefs, and proprietary contract repositories ingested into the platform.\n\nSection 3. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "high",
+      "risk_categories": ["data_ownership", "ip", "compliance_violation"],
+      "obligations": ["grant_data_license"],
+      "compliance_issues": ["RULE-005"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-017",
+    "title": "Explicit Violation of RULE-006 (Sub-Standard SLA of 95%)",
+    "category": "compliance",
+    "contract_text": "CORE DATABASE HOSTING AGREEMENT\nEffective Date: October 1, 2026. Host: LowTier Cloud LLC. Client: Apex Web Services.\n\nSection 1. Managed PostgreSQL Hosting. Managed high-performance database cluster.\n\nSection 2. Service Level Agreement. Host guarantees a monthly platform uptime availability of 95.0%. In the event uptime falls below 95%, Host shall issue a $50 service credit. Customer shall have no right to terminate for chronic monthly outages.\n\nSection 3. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "medium",
+      "risk_categories": ["sla", "compliance_violation"],
+      "obligations": ["maintain_95_percent_uptime"],
+      "compliance_issues": ["RULE-006"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-018",
+    "title": "Multiple Compounded Compliance Violations (RULE-001 and RULE-005)",
+    "category": "compliance",
+    "contract_text": "DATA MINING & CLOUD INTELLIGENCE AGREEMENT\nEffective Date: October 1, 2026. Vendor: OmniScrape Inc. Customer: MarketPulse Corp.\n\nSection 1. Data Intelligence Services. Competitive pricing intelligence feeds.\n\nSection 2. Liability Cap. Vendor liability for all causes of action is strictly limited to solely to vendor's fees paid in thirty days ($5,000).\n\nSection 3. Customer Data License. Vendor is granted an irrevocable right to train machine learning models using all queries, client records, and confidential data submitted by Customer.\n\nSection 4. Governing Law. State of New York.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["liability", "data_ownership", "compliance_violation"],
+      "obligations": ["pay_fees", "provide_data_access"],
+      "compliance_issues": ["RULE-001", "RULE-005"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-019",
+    "title": "Ambiguous Compliance Language on Security Standards",
+    "category": "compliance",
+    "contract_text": "HEALTHCARE DATA PROCESSING AGREEMENT\nEffective Date: October 1, 2026. Processor: MedVenture Cloud LLC. Covered Entity: Valley Clinic.\n\nSection 1. Protected Health Information. Processing of patient diagnostic charts.\n\nSection 2. Security Standards. Processor shall maintain commercially plausible security protocols that generally resemble standard industry practices where practicable. Processor does not warrant SOC 2 compliance, ISO 27001 certification, or HIPAA audit readiness.\n\nSection 3. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "medium",
+      "risk_categories": ["security", "ambiguity"],
+      "obligations": ["maintain_plausible_security"],
+      "compliance_issues": ["RULE-005"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "compliance_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-020",
+    "title": "Milestone-Based Payment and Deliverables Schedule",
+    "category": "obligation",
+    "contract_text": "CUSTOM ENTERPRISE SOFTWARE DEVELOPMENT AGREEMENT\nEffective Date: October 1, 2026. Developer: DevStudio Prime. Client: Global Banking Services.\n\nSection 1. Development SOW. Architecture Phase, Alpha Core, and Production Go-Live.\n\nSection 2. Milestone Payment Schedule.\n- Milestone 1: Architectural Blueprint ($50,000) due upon sign-off on November 15, 2026.\n- Milestone 2: Alpha Code Delivery ($100,000) due on January 30, 2027.\n- Milestone 3: Production Release ($150,000) due on March 31, 2027.\nClient shall remit payment within Net 30 days of each approved milestone.\n\nSection 3. Limitation of Liability. Mutual 12-month trailing fees.\n\nSection 4. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "low",
+      "risk_categories": ["payment", "milestones"],
+      "obligations": ["deliver_blueprint_nov_15", "deliver_alpha_jan_30", "production_release_mar_31", "pay_net_30"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "obligation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-021",
+    "title": "Multi-Tier Notice and Reporting Schedule",
+    "category": "obligation",
+    "contract_text": "CROSS-BORDER DISTRIBUTION & FRANCHISE AGREEMENT\nEffective Date: October 1, 2026. Franchisor: Urban Coffee Brands. Franchisee: Metro Beverage Group.\n\nSection 1. Franchise Territory. Exclusive distribution across Northern California.\n\nSection 2. Reporting Obligations. Franchisee shall deliver quarterly gross revenue audit statements within fifteen (15) days of quarter end. Monthly operational inspection logs must be submitted by the 5th of each month.\n\nSection 3. Annual Renewal Notice. Franchisee must provide formal written notice ninety (90) days prior to the annual renewal date to extend the distribution term.\n\nSection 4. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "low",
+      "risk_categories": ["reporting", "renewal_notice"],
+      "obligations": ["submit_quarterly_audit_in_15_days", "submit_monthly_logs_by_5th", "provide_90_day_renewal_notice"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "obligation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-022",
+    "title": "Multi-Deadline Licensing and Maintenance Agreement",
+    "category": "obligation",
+    "contract_text": "ENTERPRISE ERP CORE LICENSING AGREEMENT\nEffective Date: November 1, 2026. Licensor: EnterpriseCore Inc. Licensee: Pacific Logistics Corp.\n\nSection 1. Perpetual License. EnterpriseCore grants perpetual core database license.\n\nSection 2. Three-Tranche Payment Schedule.\n- Tranche 1: $100,000 on November 15, 2026.\n- Tranche 2: $100,000 on February 15, 2027.\n- Tranche 3: $100,000 on May 15, 2027.\n\nSection 3. Annual Source Code Escrow Deposit. Licensor shall deposit updated source code with IronMountain Escrow every twelve (12) months by December 31.\n\nSection 4. Governing Law. State of New York.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "low",
+      "risk_categories": ["payment", "escrow"],
+      "obligations": ["pay_tranche_1_nov_15", "pay_tranche_2_feb_15", "pay_tranche_3_may_15", "deposit_escrow_dec_31"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "obligation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-023",
+    "title": "Regulatory Compliance and Annual Audit Obligations",
+    "category": "obligation",
+    "contract_text": "MANAGED CYBERSECURITY AUDIT SERVICES AGREEMENT\nEffective Date: October 1, 2026. Auditor: CyberShield Global. Client: FinTech Trust Bank.\n\nSection 1. Compliance Audits. CyberShield shall conduct annual SOC 2 Type II examinations and quarterly penetration testing.\n\nSection 2. Audit Report Delivery Deadline. Final SOC 2 audit report must be delivered to Client board of directors within forty-five (45) days of calendar year end.\n\nSection 3. Incident Notification. Security incidents must be communicated within twenty-four (24) hours of initial detection.\n\nSection 4. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "low",
+      "risk_categories": ["audit", "reporting", "incident_response"],
+      "obligations": ["conduct_annual_soc2_audit", "deliver_audit_report_in_45_days", "notify_incidents_in_24_hours"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "obligation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-024",
+    "title": "Cloud SLA Uptime and Credit Claim Windows",
+    "category": "obligation",
+    "contract_text": "CLOUD CDN PLATFORM AGREEMENT\nEffective Date: October 1, 2026. CDN Provider: SpeedEdge Global. Customer: MediaStream Networks.\n\nSection 1. Content Delivery Network. Edge routing and video delivery acceleration.\n\nSection 2. 99.95% Availability SLA. SpeedEdge guarantees 99.95% monthly uptime.\n\nSection 3. SLA Outage Credit Claim Window. To receive service credits for SLA downtime, Customer must submit formal ticket logs within fifteen (15) days of the end of the affected calendar month.\n\nSection 4. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "low",
+      "risk_categories": ["sla", "credit_claims"],
+      "obligations": ["maintain_99_95_uptime", "file_sla_credit_claims_within_15_days"],
+      "compliance_issues": [],
+      "hitl_required": false,
+      "expected_societies": ["contract_intelligence", "obligation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-025",
+    "title": "Internal Clause Contradiction on Termination Cure Period",
+    "category": "conflict",
+    "contract_text": "ENTERPRISE WORKFORCE MANAGEMENT PLATFORM AGREEMENT\nEffective Date: October 1, 2026. Provider: WorkSync AI. Customer: Vertex Manufacturing Corp.\n\nSection 1. Services. Employee scheduling and shift management.\n\nSection 4.2. Termination for Material Breach. If either party materially breaches this Agreement, the non-breaching party must provide written notice detailing the breach, and the breaching party shall have a mandatory cure period of sixty (60) days before any termination can take effect.\n\nSection 12.1. Immediate Summary Termination. Notwithstanding any other provision herein, Provider reserves the right to immediately terminate this Agreement and suspend all access without notice, warning, or cure period upon any operational disagreement or non-material dispute.\n\nSection 14. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "high",
+      "risk_categories": ["conflict", "termination"],
+      "obligations": ["pay_fees"],
+      "compliance_issues": ["RULE-004"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-026",
+    "title": "Conflicting Payment Terms (In Arrears vs Upfront Prepayment)",
+    "category": "conflict",
+    "contract_text": "MANAGED CLOUD COMPUTING SERVICES AGREEMENT\nEffective Date: October 1, 2026. Provider: ComputeGrid LLC. Client: Apex Algorithmic Trading.\n\nSection 2.1. Billing in Arrears. Provider shall invoice Client at the end of each calendar month based on actual GPU compute consumed. Client shall pay all invoices within Net 30 days of invoice receipt.\n\nSection 8.4. Upfront Mandatory Prepayment. Notwithstanding Section 2.1, Client shall prepay in advance the entire annual projected compute fee of $240,000 on or before the first day of each contract year, with failure to prepay constituting an incurable immediate breach.\n\nSection 10. Governing Law. State of New York.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "high",
+      "risk_categories": ["conflict", "payment"],
+      "obligations": ["pay_invoices_net_30", "prepay_annual_compute_240k"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-027",
+    "title": "Cross-Society Priority Clash: Severe Risk vs Commercial Concession",
+    "category": "conflict",
+    "contract_text": "STRATEGIC AI MODEL HOSTING & RESELLER AGREEMENT\nEffective Date: October 1, 2026. Licensor: DeepMatrix Systems. Partner: Commercial AI Solutions LLC.\n\nSection 1. Commercial Pricing Concessions. Partner receives an exclusive 60% platform volume discount in exchange for conceding standard corporate risk protections.\n\nSection 8.2. Total Uncapped Indemnity and Liability Assumption. Partner agrees to assume 100% uncapped indemnification for all third-party IP infringements, data breaches, and model hallucinations generated by Licensor's underlying models, with Partner waiving all liability caps.\n\nSection 10. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["conflict", "liability", "indemnity"],
+      "obligations": ["assume_100_percent_uncapped_indemnity"],
+      "compliance_issues": ["RULE-001", "RULE-002"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence", "negotiation_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-028",
+    "title": "Subjective Best Efforts SLA Performance",
+    "category": "ambiguous",
+    "contract_text": "TELECOM DARK FIBER LEASE AGREEMENT\nEffective Date: October 1, 2026. Provider: FiberRoute Networks. Customer: Quantum Financial Exchange.\n\nSection 1. Dark Fiber Conduit. Provider leases dedicated subterranean fiber optic strands.\n\nSection 2. Service Quality and Maintenance. Provider shall use reasonable commercial best efforts, as determined solely and exclusively in the subjective discretion of Provider's field engineering team, to maintain signal integrity and repair severed fiber cables when reasonably practicable.\n\nSection 3. Remedies. Customer agrees that Provider's subjective determination of effort shall be final, binding, and non-justiciable.\n\nSection 4. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "high",
+      "risk_categories": ["ambiguity", "sla", "unilateral_discretion"],
+      "obligations": ["pay_lease_fee"],
+      "compliance_issues": ["RULE-006"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "dispute_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-029",
+    "title": "Indefinite Term with Discretionary Price Increases",
+    "category": "ambiguous",
+    "contract_text": "RAW INDUSTRIAL CHEMICAL SUPPLY AGREEMENT\nEffective Date: October 1, 2026. Supplier: ChemSource Direct. Buyer: Advanced Plastics Corp.\n\nSection 1. Supply Commitment. Supplier shall deliver bulk resin pellets.\n\nSection 2. Indefinite Duration. This Agreement continues indefinitely until terminated by mutual written agreement of both Chief Executive Officers.\n\nSection 3. Price Adjustments. Supplier may adjust product unit prices from time to time based on fluctuating macroeconomic market sentiments and supply chain pressures at Supplier's unilateral option.\n\nSection 4. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "high",
+      "risk_categories": ["ambiguity", "pricing", "indefinite_term"],
+      "obligations": ["purchase_resin_pellets"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "CASE-030",
+    "title": "Ambiguous Intellectual Property Assignment",
+    "category": "ambiguous",
+    "contract_text": "JOINT ALGORITHMIC RESEARCH COLLABORATION AGREEMENT\nEffective Date: October 1, 2026. Parties: DataLab Innovations Corp and AlphaCore Systems Inc.\n\nSection 1. Joint Research. Collaborative development of predictive neural network weights.\n\nSection 2. Intellectual Property Rights. Any and all inventions, patents, weights, and algorithms conceived during the collaboration shall belong to whichever party can most credibly demonstrate foundational conceptual genesis, with both parties possessing non-exclusive rights until an independent arbitration committee is convened.\n\nSection 3. Governing Law. State of New York.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "high",
+      "risk_categories": ["ambiguity", "ip_ownership", "dispute_risk"],
+      "obligations": ["collaborate_on_neural_weights"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "dispute_intelligence", "risk_intelligence"]
+    }
+  }
+]

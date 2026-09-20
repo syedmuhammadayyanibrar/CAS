@@ -1,0 +1,62 @@
+MASTER SAAS SERVICES AGREEMENT
+
+This Master SaaS Services Agreement ("Agreement") is made and entered into as of October 1, 2026 ("Effective Date"), by and between NovaCloud Systems Inc., a Delaware corporation with its principal place of business at 500 Cloud Way, San Francisco, CA ("Vendor"), and Acme Global Enterprises LLC, a Delaware limited liability company with offices at 100 Enterprise Blvd, New York, NY ("Customer"). Vendor and Customer may each be referred to as a "Party" or collectively as the "Parties."
+
+RECITALS
+WHEREAS, Vendor provides an enterprise cloud analytics and infrastructure management platform; and
+WHEREAS, Customer desires to subscribe to and utilize the Vendor platform under the terms and conditions set forth herein.
+
+NOW, THEREFORE, the Parties agree as follows:
+
+SECTION 1: DEFINITIONS & SUBSCRIPTION SERVICES
+1.1 Platform Access: Vendor grants Customer a non-exclusive, non-transferable, revocable subscription license to access and use the NovaCloud Platform during the Term solely for Customer's internal business purposes.
+1.2 Authorized Users: Access is restricted to designated employees and contractors of Customer. Customer is fully liable for any actions taken under authorized user credentials.
+
+SECTION 2: TERM AND AUTOMATIC RENEWAL
+2.1 Initial Term: This Agreement shall commence on the Effective Date and continue for an initial term of twelve (12) months ("Initial Term").
+2.2 Automatic Renewal: Following the Initial Term, this Agreement shall automatically renew for successive twelve (12) month periods ("Renewal Terms"), unless either Party delivers written notice of non-renewal at least sixty (60) days prior to the expiration of the then-current term.
+2.3 Price Increases: Vendor reserves the right to increase annual subscription fees by up to fifteen percent (15%) upon each renewal without prior consent.
+
+SECTION 3: FEES, BILLING & PAYMENT TERMS
+3.1 Subscription Fees: Customer shall pay an annual subscription fee of $240,000 USD, billed quarterly in advance ($60,000 USD per quarter).
+3.2 Payment Due Date: All invoices are payable Net 30 days from the invoice date. Late payments shall accrue interest at the rate of one and a half percent (1.5%) per month or the maximum rate permitted by law.
+3.3 Taxes: All fees are exclusive of all applicable sales, use, excise, or value-added taxes, which shall be Customer's sole responsibility.
+
+SECTION 4: SERVICE LEVEL AGREEMENT & PERFORMANCE
+4.1 Availability: Vendor shall use commercially reasonable efforts to make the Platform available with an Annual Uptime Percentage of at least 99.9% during each calendar year.
+4.2 Exclusions: Uptime calculations exclude scheduled maintenance, emergency maintenance, force majeure events, and downtime caused by Customer's network or integrations.
+4.3 Sole Remedy: Customer's sole and exclusive remedy for any failure to meet the SLA shall be a service credit equal to five percent (5%) of the monthly fee, applicable only to future invoices upon written claim submitted within ten (10) days of the outage.
+
+SECTION 5: CONFIDENTIALITY
+5.1 Definition: "Confidential Information" means any proprietary information disclosed by one Party to the other Party that is marked as confidential or should reasonably be understood to be confidential.
+5.2 Obligation: Each Party agrees to protect the other Party's Confidential Information with the same degree of care it uses for its own confidential information, but not less than reasonable care, for a period of five (5) years following disclosure.
+
+SECTION 6: DATA OWNERSHIP & DERIVATIVE WORKS
+6.1 Customer Data: Customer retains all rights, title, and interest in and to Customer Data uploaded to the Platform.
+6.2 Vendor Aggregate Rights: Customer hereby grants Vendor a perpetual, irrevocable, worldwide, royalty-free license to use, reproduce, aggregate, de-identify, and analyze Customer Data to train, improve, and deploy machine learning models, statistical benchmarks, and derivative analytics products.
+
+SECTION 7: INTELLECTUAL PROPERTY INDEMNIFICATION
+7.1 Vendor Indemnity: Vendor shall defend Customer against third-party claims alleging that the Platform infringes any US copyright or trade secret.
+7.2 Customer Indemnity: Customer shall defend, indemnify, and hold harmless Vendor, its affiliates, and officers from and against any and all third-party claims, damages, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of or related to Customer Data, Customer's use of the Platform, or Customer's breach of this Agreement, without financial limitation.
+
+SECTION 8: LIMITATION OF LIABILITY
+8.1 Consequential Damages Waiver: IN NO EVENT SHALL EITHER PARTY BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING LOSS OF PROFITS, DATA, OR BUSINESS INTERRUPTION.
+8.2 Aggregate Liability Cap: NOTWITHSTANDING ANYTHING TO THE CONTRARY IN THIS AGREEMENT, VENDOR'S TOTAL AGGREGATE LIABILITY ARISING OUT OF OR RELATED TO THIS AGREEMENT SHALL BE STRICTLY LIMITED TO THE FEES ACTUALLY PAID BY CUSTOMER IN THE ONE (1) MONTH PRECEDING THE INCIDENT GIVING RISE TO LIABILITY.
+8.3 Customer Liability: THE FOREGOING LIMITATION OF LIABILITY IN SECTION 8.2 SHALL NOT APPLY TO CUSTOMER'S PAYMENT OBLIGATIONS OR CUSTOMER'S INDEMNIFICATION OBLIGATIONS UNDER SECTION 7.2.
+
+SECTION 9: TERMINATION
+9.1 Termination for Cause: Either Party may terminate this Agreement immediately upon written notice if the other Party materially breaches any provision of this Agreement and fails to cure such breach within thirty (30) days of receipt of written notice.
+9.2 Termination for Insolvency: Either Party may terminate immediately upon the insolvency or bankruptcy of the other Party.
+9.3 Conflicting Termination Notice: Section 11.3 provides that Vendor may terminate services without cause upon ten (10) days email notice if Vendor determines Customer's use threatens system stability.
+
+SECTION 10: GOVERNING LAW AND DISPUTE RESOLUTION
+10.1 Governing Law: This Agreement shall be governed by and construed in accordance with the laws of the State of Delaware, without regard to its conflict of law principles.
+10.2 Dispute Resolution: In the event of any controversy or dispute, the Parties shall first attempt in good faith to resolve the dispute through executive negotiation. If unresolved within thirty (30) days, the dispute shall be submitted to final and binding arbitration administered by JAMS in New York, NY.
+
+IN WITNESS WHEREOF, the Parties have executed this Agreement by their duly authorized representatives.
+
+NOVACLOUD SYSTEMS INC.             ACME GLOBAL ENTERPRISES LLC
+By: ______________________         By: ______________________
+Name: David Vance                  Name: Elena Rostova
+Title: Chief Commercial Officer    Title: VP of Technology Procurement
+Date: October 1, 2026              Date: October 1, 2026

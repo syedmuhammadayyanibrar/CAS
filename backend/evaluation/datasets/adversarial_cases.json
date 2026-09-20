@@ -1,0 +1,162 @@
+[
+  {
+    "case_id": "ADV-001",
+    "title": "Benign Heading Masking Unlimited Third-Party Indemnity",
+    "category": "adversarial",
+    "adversarial_type": "misleading_wording",
+    "contract_text": "CLOUD INFRASTRUCTURE SUPPORT ADDENDUM\nEffective Date: October 1, 2026. Vendor: CloudCore Operations. Customer: FinTech Systems Corp.\n\nSection 1. General Support Scope. Vendor provides standard 24/7 technical ticketing support.\n\nSection 2. Customer Convenience and Assistance. In order to facilitate smooth administrative convenience and operational courtesy, Customer shall unconditionally indemnify, protect, defend, and hold harmless Vendor, its parent corporations, and subcontractors from and against all third-party lawsuits, liabilities, regulatory fines, and legal damages of any character, without financial cap, arising out of any hardware outage, cyber breach, or system failure whatsoever, regardless of Vendor's fault.\n\nSection 3. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["indemnity", "unlimited_exposure", "misleading_heading"],
+      "obligations": ["indemnify_vendor"],
+      "compliance_issues": ["RULE-002"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-002",
+    "title": "Contradictory Payment Clauses (Net 30 vs Immediate Forfeiture)",
+    "category": "adversarial",
+    "adversarial_type": "contradictory_clauses",
+    "contract_text": "ENTERPRISE ANALYTICS PLATFORM AGREEMENT\nEffective Date: October 1, 2026. Vendor: MetricPulse AI. Customer: RetailGiant LLC.\n\nSection 4. Payment Terms. Invoices shall be payable within thirty (30) days of receipt via ACH or wire transfer in accordance with standard Net 30 commercial terms.\n\nSection 11. Accelerated Account Settlement. Notwithstanding Section 4 or any other term, all platform fees are due in advance on the first day of each month. In the event fees are not credited to Vendor's offshore account by 9:00 AM on the first business day, Customer's data shall be immediately and permanently deleted with all remaining multi-year contract fees immediately accelerated.\n\nSection 14. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["conflict", "payment", "data_loss"],
+      "obligations": ["pay_net_30", "pay_first_of_month"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-003",
+    "title": "Buried Termination for Convenience in Definition Section",
+    "category": "adversarial",
+    "adversarial_type": "buried_termination",
+    "contract_text": "MULTI-YEAR TELECOMMUNICATIONS CARRIER AGREEMENT\nEffective Date: October 1, 2026. Carrier: MetroTel Global. Subscriber: Enterprise Logistics Corp.\n\nSection 1. Definitions.\n1.1 'Authorized User' means employees of Subscriber.\n1.2 'Effective Date' means October 1, 2026.\n1.3 'Insolvent Entity' means any party that fails to maintain a liquidity ratio of 4.0 or whose executive team changes, upon which Carrier may immediately terminate this entire Agreement without notice, penalty, or cure period, and confiscate all phone numbers and routing ranges.\n1.4 'Services' means dedicated fiber lines.\n\nSection 2. Term. The initial commitment term is five (5) years.\n\nSection 3. Governing Law. State of New York.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "high",
+      "risk_categories": ["termination", "buried_clause"],
+      "obligations": ["maintain_4_0_liquidity_ratio"],
+      "compliance_issues": ["RULE-004"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-004",
+    "title": "Conflicting Dates and Impossible Chronological Deadlines",
+    "category": "adversarial",
+    "adversarial_type": "conflicting_dates",
+    "contract_text": "STRATEGIC SYSTEM MIGRATION SOW\nEffective Date: October 1, 2027. Vendor: LegacyShift Corp. Client: National Trust Corp.\n\nSection 1. Phase 1 Database Extraction. Vendor shall extract all records by November 15, 2025 (twenty-three months prior to Effective Date).\n\nSection 2. Client Acceptance. Client must sign off within five (5) days of completion, or incur a $10,000 late penalty starting on August 1, 2026.\n\nSection 3. Final Expiration. This Agreement shall automatically expire on January 1, 2027 (ten months prior to the stated Effective Date).\n\nSection 4. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "high",
+      "risk_categories": ["chronology_conflict", "impossible_deadlines"],
+      "obligations": ["extract_records_nov_2025", "sign_off_in_5_days"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "obligation_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-005",
+    "title": "Conflation of IP Defense with Unlimited Financial Liability",
+    "category": "adversarial",
+    "adversarial_type": "similar_clauses_different_meanings",
+    "contract_text": "SOFTWARE RESELLER & DISTRIBUTION AGREEMENT\nEffective Date: October 1, 2026. Developer: CoreAlgorithm Inc. Distributor: GlobalTech Sales LLC.\n\nSection 5. Defense of Infringement Claims. Developer shall provide legal counsel to defend Distributor against patent claims. In connection therewith, Distributor agrees to defend, indemnify, and guarantee all commercial debts, trade liabilities, operational shortfalls, and lost revenue of Developer, whether related or unrelated to the patent claim, without cap.\n\nSection 6. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["indemnity", "unlimited_exposure"],
+      "obligations": ["guarantee_all_commercial_debts"],
+      "compliance_issues": ["RULE-002"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-006",
+    "title": "Contract Missing Core Legal Terms (Governing Law, Termination, Liability)",
+    "category": "adversarial",
+    "adversarial_type": "missing_information",
+    "contract_text": "EQUIPMENT LEASE MEMORANDUM\nParties: HeavyEquip LLC and ConstructCo.\n\nSection 1. Excavator Rental. HeavyEquip leases two excavators to ConstructCo for $15,000 monthly.\n\nSection 2. Fuel and Maintenance. ConstructCo pays for diesel fuel.\n\n[End of Document. No provisions regarding term, termination, cure periods, governing law, jurisdiction, indemnification, warranty, or limitation of liability exist.]",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "high",
+      "risk_categories": ["missing_terms", "missing_governing_law", "missing_liability_cap"],
+      "obligations": ["pay_15k_monthly", "pay_diesel_fuel"],
+      "compliance_issues": ["RULE-001", "RULE-003", "RULE-004"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-007",
+    "title": "Deliberately Ambiguous Subjective Performance Standards",
+    "category": "adversarial",
+    "adversarial_type": "deliberately_ambiguous",
+    "contract_text": "CREATIVE DIGITAL AGENCY MASTER AGREEMENT\nEffective Date: October 1, 2026. Agency: PixelCraft Studios. Brand: HauteCouture Global.\n\nSection 1. Deliverables. Brand identity concepts and campaign videos.\n\nSection 2. Standard of Work. Agency shall provide aesthetic quality commensurate with prevailing artistic elegance as interpreted exclusively in the unfettered personal judgment of Agency's creative director. Brand shall have no right of review, revision, or withholding of payment if dissatisfied.\n\nSection 3. Governing Law. State of New York.",
+    "expected": {
+      "contract_type": "Service Agreement",
+      "risk_level": "high",
+      "risk_categories": ["ambiguity", "unilateral_discretion"],
+      "obligations": ["pay_fees_without_withholding"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "dispute_intelligence", "risk_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-008",
+    "title": "False Compliance Assurance Masking Prohibited 1-Month Cap & AI Training",
+    "category": "adversarial",
+    "adversarial_type": "false_compliance_signals",
+    "contract_text": "SOC 2 CERTIFIED ENTERPRISE DATA WAREHOUSE AGREEMENT\nEffective Date: October 1, 2026. Vendor: SecureCloud Storage Corp. Customer: Premier Banking Corp.\n\nSection 1. Complete Compliance Warranty. Vendor warrants that it maintains 100% full compliance with all corporate compliance rules, enterprise governance policies, and industry security protocols.\n\nSection 8. Limitation of Liability. Notwithstanding the compliance warranty above, Vendor's total aggregate liability under this Agreement shall not exceed the fees paid in the preceding one (1) month ($2,500).\n\nSection 9. Data Rights. Vendor is granted an unrestricted, perpetual license to train machine learning models on all customer banking data.\n\nSection 10. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["deceptive_compliance", "liability", "data_ownership"],
+      "obligations": ["pay_fees"],
+      "compliance_issues": ["RULE-001", "RULE-005"],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "compliance_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-009",
+    "title": "Dispute/Breach Clause Disguised as SLA Technical Deliverable",
+    "category": "adversarial",
+    "adversarial_type": "wrong_society_trigger",
+    "contract_text": "NETWORK INFRASTRUCTURE SLA SCHEDULE\nEffective Date: October 1, 2026. Provider: SwitchRoute Inc. Customer: StreamMedia LLC.\n\nSchedule A: Technical Deliverable Metrics.\nItem 1: Ping latency under 15ms.\nItem 2: Packet loss under 0.01%.\nItem 3: In the event Customer disputes any payment invoice or alleges network latency variances, Customer automatically confesses judgment in litigation, waives all trial by jury, stipulates to $500,000 in liquidated litigation damages, and assigns all company IP to Provider.\n\nSection 4. Governing Law. State of California.",
+    "expected": {
+      "contract_type": "Vendor Agreement",
+      "risk_level": "critical",
+      "risk_categories": ["dispute_ambush", "confession_of_judgment", "ip_forfeiture"],
+      "obligations": ["maintain_latency_15ms"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "dispute_intelligence"]
+    }
+  },
+  {
+    "case_id": "ADV-010",
+    "title": "Deeply Buried Asymmetric Penalty in Miscellaneous Notice Section",
+    "category": "adversarial",
+    "adversarial_type": "buried_penalty",
+    "contract_text": "CLOUD BACKUP REPOSITORY AGREEMENT\nEffective Date: October 1, 2026. Provider: DeepVault LLC. Customer: Alpha Retail Inc.\n\nSection 1. Backup Storage. Encrypted offsite cold storage.\nSection 2. Fees. $1,000 monthly.\nSection 3. Term. 12 months.\nSection 14. Miscellaneous Notices. All notices shall be in writing sent via registered mail to Provider's post office box. In the event Customer sends any email, inquiry, or question regarding billing discrepancies without using registered postal mail, Customer shall pay an immediate penalty of $25,000 per email, which Provider may automatically debit from Customer's credit card.\n\nSection 15. Governing Law. State of Delaware.",
+    "expected": {
+      "contract_type": "SaaS Agreement",
+      "risk_level": "high",
+      "risk_categories": ["penalty", "buried_clause", "unfair_terms"],
+      "obligations": ["send_notices_by_registered_mail"],
+      "compliance_issues": [],
+      "hitl_required": true,
+      "expected_societies": ["contract_intelligence", "risk_intelligence", "dispute_intelligence"]
+    }
+  }
+]

@@ -1,0 +1,248 @@
+[
+  {
+    "case_id": "ROUTE-001",
+    "title": "Contract Intake Analysis Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "CONTRACT_INTAKE",
+      "lifecycle_state": "ANALYZING",
+      "payload": {
+        "contract_id": "CTR-ROUTE-001",
+        "action": "ANALYZE_NEW_CONTRACT"
+      }
+    },
+    "expected": {
+      "expected_society": "contract_intelligence",
+      "expected_parallel_societies": [
+        "risk_intelligence",
+        "compliance_intelligence",
+        "negotiation_intelligence",
+        "dispute_intelligence"
+      ],
+      "expected_agent": "Document Parser",
+      "expected_next_transition": "Director dispatching parallel assessment",
+      "expected_escalation": false,
+      "expected_hitl_state": "WAITING",
+      "target_system": "director"
+    }
+  },
+  {
+    "case_id": "ROUTE-002",
+    "title": "Signed Contract Post-Execution Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "CONTRACT_SIGNED",
+      "lifecycle_state": "SIGNED",
+      "payload": {
+        "contract_id": "CTR-ROUTE-002",
+        "effective_date": "2026-10-01"
+      }
+    },
+    "expected": {
+      "expected_society": "obligation_intelligence",
+      "expected_parallel_societies": [],
+      "expected_agent": "Obligation Monitoring Agent",
+      "expected_next_transition": "Register long-running payment, SLA, and renewal obligations",
+      "expected_escalation": false,
+      "expected_hitl_state": "NOT_REQUIRED",
+      "target_system": "obligation_intelligence"
+    }
+  },
+  {
+    "case_id": "ROUTE-003",
+    "title": "Renewal Window Approaching Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "RENEWAL_WINDOW_TRIGGER",
+      "lifecycle_state": "RENEWAL_WINDOW",
+      "payload": {
+        "contract_id": "CTR-ROUTE-003",
+        "notice_window_days": 60
+      }
+    },
+    "expected": {
+      "expected_society": "risk_intelligence",
+      "expected_parallel_societies": [
+        "negotiation_intelligence"
+      ],
+      "expected_agent": "Risk Hunter",
+      "expected_next_transition": "Prepare renegotiation leverage and pricing counter-proposals",
+      "expected_escalation": false,
+      "expected_hitl_state": "NOT_REQUIRED",
+      "target_system": "director"
+    }
+  },
+  {
+    "case_id": "ROUTE-004",
+    "title": "Active Contract Dispute Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "DISPUTE_RAISED",
+      "lifecycle_state": "IN_DISPUTE",
+      "payload": {
+        "contract_id": "CTR-ROUTE-004",
+        "opposing_claim": "Breach of SLA commitments"
+      }
+    },
+    "expected": {
+      "expected_society": "dispute_intelligence",
+      "expected_parallel_societies": [
+        "risk_intelligence"
+      ],
+      "expected_agent": "Litigation Simulator",
+      "expected_next_transition": "Calibrate organizational exposure to litigation damages",
+      "expected_escalation": true,
+      "expected_hitl_state": "REVIEW_REQUIRED",
+      "target_system": "director"
+    }
+  },
+  {
+    "case_id": "ROUTE-005",
+    "title": "Critical Termination Risk Detected Escalation",
+    "category": "routing",
+    "input_event": {
+      "event_type": "TERMINATION_RISK_DETECTED",
+      "lifecycle_state": "ANALYZING",
+      "payload": {
+        "contract_id": "CTR-ROUTE-005",
+        "severity": "CRITICAL",
+        "clause": "Section 3 Unilateral Termination"
+      }
+    },
+    "expected": {
+      "expected_society": "risk_intelligence",
+      "expected_parallel_societies": [],
+      "expected_agent": "Risk Hunter",
+      "expected_next_transition": "CAS Director Conflict / Escalation",
+      "expected_escalation": true,
+      "expected_hitl_state": "PAUSED_FOR_HUMAN",
+      "target_system": "Approval Center"
+    }
+  },
+  {
+    "case_id": "ROUTE-006",
+    "title": "Inbound General Counsel Approval Event Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "APPROVAL_DECISION",
+      "lifecycle_state": "ANALYZING",
+      "payload": {
+        "contract_id": "CTR-ROUTE-006",
+        "decision": "APPROVED",
+        "reviewer": "general-counsel@organization.com",
+        "notes": "Approved with commercial exceptions noted."
+      }
+    },
+    "expected": {
+      "expected_society": "CAS Director",
+      "expected_parallel_societies": [
+        "obligation_intelligence"
+      ],
+      "expected_agent": "handle_inbound_approval",
+      "expected_next_transition": "Activate Obligation Intelligence post-signature tracking",
+      "expected_escalation": false,
+      "expected_hitl_state": "COMPLETED",
+      "target_system": "obligation_intelligence"
+    }
+  },
+  {
+    "case_id": "ROUTE-007",
+    "title": "Inbound General Counsel Rejection Event Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "APPROVAL_DECISION",
+      "lifecycle_state": "ANALYZING",
+      "payload": {
+        "contract_id": "CTR-ROUTE-007",
+        "decision": "REJECTED",
+        "reviewer": "general-counsel@organization.com",
+        "notes": "Uncapped liability unacceptable. Terminate negotiations."
+      }
+    },
+    "expected": {
+      "expected_society": "CAS Director",
+      "expected_parallel_societies": [],
+      "expected_agent": "handle_inbound_approval",
+      "expected_next_transition": "Trigger Outbound Decision Archive via Fastn",
+      "expected_escalation": false,
+      "expected_hitl_state": "COMPLETED",
+      "target_system": "fastn_decision_archive"
+    }
+  },
+  {
+    "case_id": "ROUTE-008",
+    "title": "Inbound Counterparty Redline Proposal Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "COUNTERPARTY_PROPOSAL",
+      "lifecycle_state": "ANALYZING",
+      "payload": {
+        "contract_id": "CTR-ROUTE-008",
+        "clauseReference": "Section 8.2",
+        "proposal": "Vendor agrees to mutual 24-month cap instead of 1-month cap.",
+        "concessionOffered": "Bilateral mutual cap"
+      }
+    },
+    "expected": {
+      "expected_society": "negotiation_intelligence",
+      "expected_parallel_societies": [
+        "risk_intelligence"
+      ],
+      "expected_agent": "handle_inbound_negotiation",
+      "expected_next_transition": "Broadcast updated counter-strategy back through Fastn",
+      "expected_escalation": false,
+      "expected_hitl_state": "COMPLETED",
+      "target_system": "negotiation_intelligence"
+    }
+  },
+  {
+    "case_id": "ROUTE-009",
+    "title": "Inbound Operational Deadline Extension Routing",
+    "category": "routing",
+    "input_event": {
+      "event_type": "DEADLINE_CHANGE",
+      "lifecycle_state": "SIGNED",
+      "payload": {
+        "contract_id": "CTR-ROUTE-009",
+        "obligationId": "OBL-001",
+        "newDeadline": "2027-01-31",
+        "reason": "Supply chain component delay"
+      }
+    },
+    "expected": {
+      "expected_society": "obligation_intelligence",
+      "expected_parallel_societies": [
+        "risk_intelligence"
+      ],
+      "expected_agent": "handle_inbound_deadline_change",
+      "expected_next_transition": "Trigger Fastn deadline escalation alerts",
+      "expected_escalation": false,
+      "expected_hitl_state": "COMPLETED",
+      "target_system": "obligation_intelligence"
+    }
+  },
+  {
+    "case_id": "ROUTE-010",
+    "title": "Cross-Society Priority Contradiction Arbitration",
+    "category": "routing",
+    "input_event": {
+      "event_type": "CROSS_SOCIETY_CONFLICT",
+      "lifecycle_state": "ANALYZING",
+      "payload": {
+        "contract_id": "CTR-ROUTE-010",
+        "conflict_clause": "Section 8.2",
+        "risk_stance": "CRITICAL - Strike uncapped liability",
+        "negotiation_stance": "Trade liability cap for 60% price discount"
+      }
+    },
+    "expected": {
+      "expected_society": "CAS Director",
+      "expected_parallel_societies": [],
+      "expected_agent": "Conflict Resolver",
+      "expected_next_transition": "Human Review Request (General Counsel escalation)",
+      "expected_escalation": true,
+      "expected_hitl_state": "PAUSED_FOR_HUMAN",
+      "target_system": "Approval Center"
+    }
+  }
+]
