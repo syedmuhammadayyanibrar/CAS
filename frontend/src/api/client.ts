@@ -17,6 +17,45 @@ export interface ContractDetail extends ContractSummary {
   metadata?: Record<string, any>;
 }
 
+export interface DocumentParseResult {
+  filename: string;
+  file_type: string;
+  content: string;
+  character_count: number;
+  word_count: number;
+  paragraph_count: number;
+  estimated_read_time_minutes: number;
+  detected_title?: string;
+  detected_parties?: string[];
+  contract_id?: string;
+  status?: string;
+}
+
+export interface GoogleDriveFile {
+  id: string;
+  name: string;
+  title: string;
+  file_type: string;
+  size_kb: number;
+  folder: string;
+  last_modified: string;
+  counterparty: string;
+  governing_law: string;
+  description: string;
+}
+
+export interface GoogleDriveImportResult extends DocumentParseResult {
+  success: boolean;
+  document_id: string;
+  title: string;
+  counterparty: string;
+  governing_law: string;
+  source: string;
+  fastn_workflow: string;
+  fastn_workflow_id: string;
+  fastn_status: string;
+}
+
 export interface DashboardSummary {
   portfolio: {
     total_contracts: number;
@@ -246,6 +285,49 @@ export async function uploadContract(title: string, content: string, metadata?: 
     body: JSON.stringify({ title, content, metadata }),
   });
   if (!res.ok) throw new Error("Failed to upload contract");
+  return res.json();
+}
+
+export async function uploadContractDocument(file: File, createContract: boolean = false): Promise<DocumentParseResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("create_contract", String(createContract));
+
+  const res = await fetch(`${API_BASE}/contracts/upload-document`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+    throw new Error(err.detail || "Failed to upload and parse document");
+  }
+  return res.json();
+}
+
+export async function fetchGoogleDriveFiles(): Promise<GoogleDriveFile[]> {
+  const res = await fetch(`${API_BASE}/automations/google-drive/files`);
+  if (!res.ok) throw new Error("Failed to list Google Drive files");
+  return res.json();
+}
+
+export async function importGoogleDriveDocument(
+  documentId: string,
+  customUrl?: string,
+  autoCreateContract: boolean = false
+): Promise<GoogleDriveImportResult> {
+  const res = await fetch(`${API_BASE}/automations/google-drive/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      document_id: documentId,
+      custom_url: customUrl,
+      auto_create_contract: autoCreateContract,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Import failed" }));
+    throw new Error(err.detail || "Failed to import from Google Drive via Fastn");
+  }
   return res.json();
 }
 

@@ -34,6 +34,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { runStandaloneSociety, executeAutomation } from "../api/client";
+import { DocumentIngestBar } from "../components/DocumentIngestBar";
 
 interface SocietyMeta {
   id: string;
@@ -845,25 +846,18 @@ Execution is conditioned on securing commercial symmetry:
 
         {/* Input Parameters Form */}
         <div className="space-y-4">
-          {/* Contract Textarea */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <label className="font-semibold text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-slate-500" />
-                Contract Text / Target Clauses
-              </label>
-              <span className="text-[11px] font-mono text-slate-400">
-                {contractText.length} characters • {contractText.split("\n").filter(Boolean).length} paragraphs
-              </span>
-            </div>
-            <textarea
-              rows={9}
-              value={contractText}
-              onChange={(e) => setContractText(e.target.value)}
-              placeholder="Paste contract agreement or specific clause here..."
-              className="w-full p-3.5 text-xs font-mono bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all leading-relaxed"
-            />
-          </div>
+          {/* Omni-Channel Document Ingestion Bar (Upload / Google Drive Fastn / Templates) */}
+          <DocumentIngestBar
+            contractText={contractText}
+            onContractTextChange={(newText, meta) => {
+              setContractText(newText);
+              if (meta?.counterparty) {
+                setPartyB(`${meta.counterparty} (Vendor)`);
+              }
+            }}
+            contractId={contractId}
+            onContractIdChange={(newId) => setContractId(newId)}
+          />
 
           {/* Dynamic Parameters based on Society Type */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">

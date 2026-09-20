@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 import json
+import base64
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 from backend.director.execution_tracker import execution_tracker
+from backend.core.document_parser import DocumentParser
 
 from backend.database.db import get_db
 from backend.database.schema import (
@@ -41,6 +43,12 @@ class AskContractRequest(BaseModel):
     question: str
 
 
+class DirectExtractRequest(BaseModel):
+    filename: str = "document.txt"
+    base64_data: Optional[str] = None
+    text_content: Optional[str] = None
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def upload_contract(req: ContractUploadRequest, db: AsyncSession = Depends(get_db)):
     """Ingests a new contract document into the CAS repository."""
@@ -57,6 +65,67 @@ async def upload_contract(req: ContractUploadRequest, db: AsyncSession = Depends
     await db.commit()
     await db.refresh(contract)
     return {"contract_id": contract.id, "title": contract.title, "status": contract.status}
+
+
+@router.post("/upload-document", status_code=status.HTTP_200_OK)
+async def upload_contract_document(
+    file: UploadFile = File(...),
+    create_contract: bool = Form(False),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Accepts native document uploads (.docx, .pdf, .txt, .md, .json),
+    extracts contract text with structural metadata, and optionally registers
+    a new Contract in the CAS repository.
+    """
+    content_bytes = await file.read()
+    if not content_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    try:
+        parsed = DocumentParser.extract_text_from_bytes(file.filename or "uploaded_contract.txt", content_bytes)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Document parsing error: {str(e)}")
+
+    if create_contract:
+        import uuid
+        cid = f"CTR-{uuid.uuid4().hex[:8].upper()}"
+        contract = ContractModel(
+            id=cid,
+            title=parsed["detected_title"] or "Uploaded Agreement",
+            raw_text=parsed["content"],
+            status="INTAKE",
+            metadata_json={
+                "source": "native_upload",
+                "filename": parsed["filename"],
+                "file_type": parsed["file_type"],
+                "word_count": parsed["word_count"],
+                "character_count": parsed["character_count"],
+                "parties": parsed["detected_parties"],
+            }
+        )
+        db.add(contract)
+        await db.commit()
+        await db.refresh(contract)
+        parsed["contract_id"] = contract.id
+        parsed["status"] = contract.status
+
+    return parsed
+
+
+@router.post("/extract-text", status_code=status.HTTP_200_OK)
+async def extract_text_from_payload(req: DirectExtractRequest):
+    """Extracts text from base64 document or raw text."""
+    if req.base64_data:
+        try:
+            raw_bytes = base64.b64decode(req.base64_data)
+            return DocumentParser.extract_text_from_bytes(req.filename, raw_bytes)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to decode base64 data: {e}")
+    elif req.text_content:
+        return DocumentParser.extract_text_from_bytes(req.filename, req.text_content.encode("utf-8"))
+    raise HTTPException(status_code=400, detail="Provide either base64_data or text_content.")
+
 
 
 @router.get("")

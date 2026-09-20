@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, FileText, Upload, Sparkles } from "lucide-react";
 import { uploadContract } from "../api/client";
+import { DocumentIngestBar } from "./DocumentIngestBar";
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -137,24 +138,17 @@ export function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
             </select>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-xs font-semibold text-slate-700">Contract Raw Text</label>
-              <button
-                type="button"
-                onClick={() => setContent(SAMPLE_TEXT)}
-                className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Reset Sample Contract
-              </button>
-            </div>
-            <textarea
-              rows={10}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Paste contract text, clauses, or agreement terms..."
-              className="w-full font-mono bg-slate-50 border border-slate-200 rounded-md p-3 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500 leading-relaxed"
+          {/* Omni-Channel Document Ingestion (Upload / Google Drive Fastn / Templates) */}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Contract Ingestion &amp; Source Document</label>
+            <DocumentIngestBar
+              contractText={content}
+              onContractTextChange={(newText, meta) => {
+                setContent(newText);
+                if (meta?.title) setTitle(meta.title);
+                if (meta?.counterparty) setCounterparty(meta.counterparty);
+                if (meta?.governingLaw) setGoverningLaw(meta.governingLaw);
+              }}
             />
           </div>
 

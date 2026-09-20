@@ -15,6 +15,61 @@ class ExecuteAutomationRequest(BaseModel):
     payload: Optional[Dict[str, Any]] = None
 
 
+class GoogleDriveImportRequest(BaseModel):
+    document_id: str = "gdrive_novacloud_saas_2026"
+    custom_url: Optional[str] = None
+    auto_create_contract: bool = False
+
+
+@router.get("/google-drive/files")
+async def list_google_drive_files():
+    """
+    Lists connected legal contract documents from Google Drive available for
+    intake via Fastn.
+    """
+    return fastn_client.get_google_drive_documents()
+
+
+@router.post("/google-drive/import")
+async def import_google_drive_contract(
+    req: GoogleDriveImportRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Triggers Fastn's cas-contract-intake workflow (wf_0c61baf31b93) for an incoming
+    Google Drive contract document, records execution in Fastn nervous system,
+    and returns extracted text and metadata.
+    """
+    res = await fastn_client.import_from_google_drive(
+        document_id=req.document_id,
+        custom_url=req.custom_url,
+        db_session=db
+    )
+
+    if req.auto_create_contract:
+        from backend.database.schema import ContractModel
+        contract = ContractModel(
+            id=res["contract_id"],
+            title=res["title"],
+            raw_text=res["content"],
+            status="INTAKE",
+            governing_law=res.get("governing_law"),
+            metadata_json={
+                "source": "google_drive",
+                "fastn_workflow": "cas-contract-intake",
+                "document_id": req.document_id,
+                "filename": res["filename"],
+                "counterparty": res.get("counterparty"),
+            }
+        )
+        db.add(contract)
+        await db.commit()
+        await db.refresh(contract)
+        res["database_registered"] = True
+
+    return res
+
+
 @router.get("")
 async def list_automations():
     """

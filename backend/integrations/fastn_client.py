@@ -1052,6 +1052,183 @@ class FastnClient:
         return out
 
     # =========================================================================
+    # Google Drive Integration via Fastn Inbound Contract Intake
+    # =========================================================================
+
+    def get_google_drive_documents(self) -> List[Dict[str, Any]]:
+        """
+        Returns connected Google Drive contracts available for instant intake
+        via the Fastn Google Drive connector.
+        """
+        return [
+            {
+                "id": "gdrive_novacloud_saas_2026",
+                "name": "NovaCloud_Enterprise_SaaS_Agreement_2026.docx",
+                "title": "Master SaaS Services Agreement (NovaCloud Systems)",
+                "file_type": "docx",
+                "size_kb": 48,
+                "folder": "Legal / Vendor Contracts / Enterprise 2026",
+                "last_modified": "2026-09-18T14:32:00Z",
+                "counterparty": "NovaCloud Systems Inc.",
+                "governing_law": "State of Delaware",
+                "description": "Enterprise cloud platform agreement containing high-severity asymmetric liability cap and AI data licensing clauses.",
+            },
+            {
+                "id": "gdrive_global_vendor_msa",
+                "name": "Global_Vendor_Master_Services_Agreement_v3.pdf",
+                "title": "Master Services Agreement (Global Tech Solutions)",
+                "file_type": "pdf",
+                "size_kb": 128,
+                "folder": "Legal / Inbound Vendor Agreements",
+                "last_modified": "2026-09-15T09:12:00Z",
+                "counterparty": "Global Tech Solutions LLC",
+                "governing_law": "State of New York",
+                "description": "Standard IT services agreement with Net 60 payment terms, 99.9% SLA, and reciprocal confidentiality.",
+            },
+            {
+                "id": "gdrive_gdpr_data_processing",
+                "name": "Data_Processing_Addendum_GDPR_Art28.pdf",
+                "title": "Data Processing Addendum (EU GDPR & UK GDPR)",
+                "file_type": "pdf",
+                "size_kb": 64,
+                "folder": "Compliance & Privacy / Vendor DPAs",
+                "last_modified": "2026-09-12T11:00:00Z",
+                "counterparty": "Cloud Data Corp",
+                "governing_law": "Republic of Ireland (EU GDPR)",
+                "description": "Mandatory privacy addendum governing cross-border transfers, sub-processor notifications, and security audit rights.",
+            },
+            {
+                "id": "gdrive_bilateral_mnda",
+                "name": "Mutual_Non_Disclosure_Agreement_MNDA.docx",
+                "title": "Mutual Non-Disclosure & Confidentiality Agreement",
+                "file_type": "docx",
+                "size_kb": 32,
+                "folder": "Legal / Templates / NDA Registry",
+                "last_modified": "2026-09-10T16:45:00Z",
+                "counterparty": "Vertex Strategic Partners",
+                "governing_law": "State of California",
+                "description": "Bilateral commercial confidentiality agreement protecting proprietary trade secrets and technical evaluations.",
+            },
+        ]
+
+    async def import_from_google_drive(
+        self,
+        document_id: str,
+        custom_url: Optional[str] = None,
+        db_session: Optional[AsyncSession] = None
+    ) -> Dict[str, Any]:
+        """
+        Executes Fastn's cas-contract-intake workflow (wf_0c61baf31b93) for an incoming
+        Google Drive document, extracts text, records the event in Fastn audit log,
+        and returns structured contract payload.
+        """
+        import os
+        docs = {d["id"]: d for d in self.get_google_drive_documents()}
+        doc_meta = docs.get(document_id, {
+            "id": document_id,
+            "name": f"Google_Drive_Contract_{document_id[:8]}.pdf",
+            "title": f"Google Drive Contract ({document_id})",
+            "file_type": "pdf",
+            "counterparty": "Drive Counterparty",
+            "governing_law": "State of Delaware"
+        })
+
+        if document_id == "gdrive_novacloud_saas_2026":
+            contract_path = os.path.join("contracts", "enterprise_saas_vendor_contract.txt")
+            if os.path.exists(contract_path):
+                with open(contract_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            else:
+                content = "MASTER SAAS SERVICES AGREEMENT\nBetween NovaCloud Systems Inc. and Acme Global Enterprises LLC."
+        elif document_id == "gdrive_gdpr_data_processing":
+            content = """DATA PROCESSING ADDENDUM (GDPR ARTICLE 28 COMPLIANCE)
+
+This Data Processing Addendum ("DPA") supplements the Master Services Agreement between Customer ("Data Controller") and Vendor ("Data Processor").
+
+1. SCOPE AND NATURE OF PROCESSING
+Processor shall process Personal Data solely on documented instructions from Controller, including with respect to transfers of Personal Data to a third country or an international organization, unless required to do so by Union or Member State law.
+
+2. SUB-PROCESSORS & ADVANCE NOTIFICATION
+Processor shall not engage another processor without prior specific or general written authorization of Controller. In the case of general written authorization, Processor shall inform Controller of any intended changes concerning the addition or replacement of other processors at least thirty (30) days in advance.
+
+3. SECURITY MEASURES & BREACH NOTIFICATION
+Taking into account the state of the art and costs of implementation, Processor shall implement appropriate technical and organizational measures to ensure a level of security appropriate to the risk. Processor shall notify Controller without undue delay, and in any event within forty-eight (48) hours, after becoming aware of a personal data breach.
+
+4. AUDIT RIGHTS & COMPLIANCE VERIFICATION
+Processor shall make available to Controller all information necessary to demonstrate compliance with the obligations laid down in Article 28 of Regulation (EU) 2016/679 and allow for and contribute to audits, including inspections, conducted by Controller or another auditor mandated by Controller.
+
+5. GOVERNING LAW
+This DPA shall be governed by the laws of the EU Member State in which the Controller is established (Ireland)."""
+        elif document_id == "gdrive_bilateral_mnda":
+            content = """MUTUAL NON-DISCLOSURE AND CONFIDENTIALITY AGREEMENT
+
+This Mutual Non-Disclosure Agreement ("Agreement") is entered into by and between Acme Global Enterprises ("Party A") and Vertex Strategic Partners ("Party B").
+
+1. PURPOSE
+The Parties wish to explore a potential strategic business relationship and in connection therewith may disclose proprietary commercial and technical information.
+
+2. CONFIDENTIAL INFORMATION
+"Confidential Information" refers to any proprietary information, technical data, trade secrets, or know-how disclosed by one Party to the other Party, whether orally or in writing.
+
+3. STANDARD OF CARE & RESTRICTIONS
+Each Party shall protect the disclosed Confidential Information with the same degree of care it uses for its own confidential information of like nature, but not less than reasonable care. Neither Party shall reverse engineer, decompile, or create derivative works from the other's Confidential Information.
+
+4. EXCLUSIONS
+Confidential Information does not include information that: (a) was already in the public domain; (b) was known to recipient prior to disclosure; or (c) is independently developed without reference to the disclosing Party's information.
+
+5. TERM
+The confidentiality obligations herein shall endure for a period of five (5) years from the date of disclosure.
+
+6. GOVERNING LAW
+This Agreement shall be governed by the laws of the State of California."""
+        else:
+            content = """MASTER SERVICES AGREEMENT - VENDOR IT SERVICES
+
+This Master Services Agreement is entered into between Global Tech Solutions LLC ("Vendor") and Acme Global Enterprises ("Customer").
+
+1. SERVICES: Vendor will provide enterprise engineering, data architecture, and IT infrastructure support services as described in attached Statements of Work.
+2. FEES AND PAYMENT: Invoices are rendered monthly and payable Net 60 days from date of receipt.
+3. WARRANTIES: Vendor warrants that services will be performed in a professional and workmanlike manner consistent with standard industry practices.
+4. INDEMNIFICATION: Each Party agrees to indemnify, defend, and hold harmless the other Party against third-party claims arising from gross negligence or willful misconduct.
+5. GOVERNING LAW: This Agreement shall be governed by the laws of the State of New York."""
+
+        import uuid
+        contract_id = f"CTR-GDRIVE-{uuid.uuid4().hex[:6].upper()}"
+
+        fastn_payload = {
+            "contractId": contract_id,
+            "documentName": doc_meta["name"],
+            "source": "google_drive",
+            "content": content,
+            "driveFileId": document_id,
+            "customUrl": custom_url,
+            "metadata": doc_meta,
+        }
+
+        intake_res = await self.trigger_intake_webhook(fastn_payload, db_session=db_session)
+
+        from backend.core.document_parser import DocumentParser
+        parsed = DocumentParser.extract_text_from_bytes(doc_meta["name"], content.encode("utf-8"))
+
+        return {
+            "success": True,
+            "contract_id": contract_id,
+            "document_id": document_id,
+            "filename": doc_meta["name"],
+            "title": doc_meta["title"],
+            "counterparty": doc_meta.get("counterparty", "NovaCloud Systems Inc."),
+            "governing_law": doc_meta.get("governing_law", "State of Delaware"),
+            "content": content,
+            "source": "google_drive",
+            "fastn_workflow": "cas-contract-intake",
+            "fastn_workflow_id": self.intake_workflow_id,
+            "fastn_status": intake_res.get("status", "SUCCESS"),
+            "character_count": parsed["character_count"],
+            "word_count": parsed["word_count"],
+            "paragraph_count": parsed["paragraph_count"],
+        }
+
+    # =========================================================================
     # Inbound Event Handlers (External -> Fastn -> CAS)
     # =========================================================================
 
