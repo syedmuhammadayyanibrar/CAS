@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     # Gemini API Settings (SOLE LLM Provider)
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.6-flash"
     GEMINI_TEMPERATURE: float = 0.1
     GEMINI_MAX_RETRIES: int = 3
     GEMINI_TIMEOUT_SECONDS: float = 45.0
