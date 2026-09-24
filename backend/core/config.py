@@ -24,9 +24,10 @@ class Settings(BaseSettings):
     GEMINI_MAX_RETRIES: int = 3
     GEMINI_TIMEOUT_SECONDS: float = 45.0
 
-    # PostgreSQL Database
-    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/cas_db"
+    # Database (Defaults to local/temp SQLite, overridden by cloud DATABASE_URL in production)
+    DATABASE_URL: str = "sqlite+aiosqlite:///cas_dev.db"
     DATABASE_POOL_SIZE: int = 10
+
 
     # Optional Redis for caching / queuing
     REDIS_URL: Optional[str] = None

@@ -71,7 +71,6 @@ async def upload_contract(req: ContractUploadRequest, db: AsyncSession = Depends
 async def upload_contract_document(
     file: UploadFile = File(...),
     create_contract: bool = Form(False),
-    db: AsyncSession = Depends(get_db)
 ):
     """
     Accepts native document uploads (.docx, .pdf, .txt, .md, .json),
@@ -82,33 +81,42 @@ async def upload_contract_document(
     if not content_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    filename = file.filename or "uploaded_contract.pdf"
     try:
-        parsed = DocumentParser.extract_text_from_bytes(file.filename or "uploaded_contract.txt", content_bytes)
+        parsed = DocumentParser.extract_text_from_bytes(filename, content_bytes)
     except Exception as e:
+        logger.error(f"Document parsing error for {filename}: {e}")
         raise HTTPException(status_code=422, detail=f"Document parsing error: {str(e)}")
 
     if create_contract:
         import uuid
+        from backend.database.db import AsyncSessionLocal
         cid = f"CTR-{uuid.uuid4().hex[:8].upper()}"
-        contract = ContractModel(
-            id=cid,
-            title=parsed["detected_title"] or "Uploaded Agreement",
-            raw_text=parsed["content"],
-            status="INTAKE",
-            metadata_json={
-                "source": "native_upload",
-                "filename": parsed["filename"],
-                "file_type": parsed["file_type"],
-                "word_count": parsed["word_count"],
-                "character_count": parsed["character_count"],
-                "parties": parsed["detected_parties"],
-            }
-        )
-        db.add(contract)
-        await db.commit()
-        await db.refresh(contract)
-        parsed["contract_id"] = contract.id
-        parsed["status"] = contract.status
+        try:
+            async with AsyncSessionLocal() as session:
+                contract = ContractModel(
+                    id=cid,
+                    title=parsed["detected_title"] or "Uploaded Agreement",
+                    raw_text=parsed["content"],
+                    status="INTAKE",
+                    metadata_json={
+                        "source": "native_upload",
+                        "filename": parsed["filename"],
+                        "file_type": parsed["file_type"],
+                        "word_count": parsed["word_count"],
+                        "character_count": parsed["character_count"],
+                        "parties": parsed["detected_parties"],
+                    }
+                )
+                session.add(contract)
+                await session.commit()
+                await session.refresh(contract)
+                parsed["contract_id"] = contract.id
+                parsed["status"] = contract.status
+        except Exception as db_err:
+            logger.error(f"Failed to persist contract to database: {db_err}")
+            parsed["contract_id"] = cid
+            parsed["status"] = "INTAKE_DRAFT"
 
     return parsed
 

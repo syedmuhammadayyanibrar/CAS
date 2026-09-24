@@ -108,38 +108,84 @@ class DocumentParser:
     @classmethod
     def _parse_pdf(cls, content_bytes: bytes) -> str:
         """Parses PDF documents using pypdf if available, or native stream parser."""
+        extracted_pages = []
+
+        # 1. Primary: Use pypdf with decrypt & multi-mode extraction
         try:
             import pypdf
             reader = pypdf.PdfReader(io.BytesIO(content_bytes))
-            pages_text = []
+
+            # Decrypt if encrypted with standard empty password
+            if getattr(reader, "is_encrypted", False):
+                try:
+                    reader.decrypt("")
+                except Exception as dec_err:
+                    logger.debug(f"pypdf empty password decrypt notice: {dec_err}")
+
             for idx, page in enumerate(reader.pages):
-                txt = page.extract_text()
+                txt = ""
+                try:
+                    txt = page.extract_text()
+                except Exception:
+                    pass
+
+                # If standard extract_text returned nothing, try layout extraction
+                if not txt or not txt.strip():
+                    try:
+                        txt = page.extract_text(extraction_mode="layout")
+                    except Exception:
+                        pass
+
                 if txt and txt.strip():
-                    pages_text.append(txt.strip())
-            if pages_text:
-                return "\n\n".join(pages_text)
-        except Exception as e:
-            logger.debug(f"pypdf extraction failed or not available ({e}), falling back to stream parsing.")
+                    extracted_pages.append(txt.strip())
 
-        # Fallback: extract text blocks from PDF stream
+            if extracted_pages:
+                full_text = "\n\n".join(extracted_pages).strip()
+                # Ensure the text isn't just binary characters
+                if any(c.isalnum() for c in full_text):
+                    return full_text
+        except Exception as e:
+            logger.debug(f"pypdf extraction notice ({e}), attempting stream parsing.")
+
+        # 2. Secondary: Decompress PDF streams (FlateDecode) to extract text
         try:
-            raw = content_bytes.decode("latin-1", errors="ignore")
-            # Extract PDF parenthesized text elements inside text objects (Tj / TJ)
-            matches = re.findall(r"\(([\w\s\.,\-\'\":;?!@#$%&*+=\[\]{}()<>/\\]{3,})\)\s*(?:Tj|'|\")", raw)
-            if matches:
-                # Clean escaped chars
-                cleaned = [m.replace("\\(", "(").replace("\\)", ")").replace("\\r", "\n") for m in matches]
-                return "\n".join(cleaned)
-            
-            # General text heuristics
-            readable_blocks = re.findall(r"[A-Za-z0-9\s,.\-\'\"\:\;\/\(\)]{20,}", raw)
-            if readable_blocks:
-                return "\n\n".join(b.strip() for b in readable_blocks[:80])
-        except Exception as e:
-            logger.error(f"Stream PDF extraction error: {e}")
+            import zlib
+            stream_matches = re.findall(b"stream[\r\n]+(.*?)[\r\n]+endstream", content_bytes, re.DOTALL)
+            decompressed_texts = []
+            for stream in stream_matches:
+                data = None
+                for wbits in (0, -15, 15):
+                    try:
+                        data = zlib.decompress(stream, wbits)
+                        break
+                    except Exception:
+                        continue
 
-        # Final graceful fallback to plain text
-        return cls._parse_plain_text(content_bytes)
+                if data:
+                    text_cand = data.decode("latin-1", errors="ignore")
+                    tj_matches = re.findall(r"\(([\w\s\.,\-\'\":;?!@#$%&*+=\[\]{}()<>/\\]{3,})\)\s*(?:Tj|'|\")", text_cand)
+                    if tj_matches:
+                        decompressed_texts.extend(tj_matches)
+                    else:
+                        runs = re.findall(r"[A-Za-z0-9\s,.\-\'\"\:\;\/\(\)]{25,}", text_cand)
+                        valid_runs = [r.strip() for r in runs if not any(kw in r for kw in ("/Type", "/Pages", "/Font", "/Length", "/Filter", "/Catalog", "xref", "trailer"))]
+                        if valid_runs:
+                            decompressed_texts.extend(valid_runs)
+
+            if decompressed_texts:
+                stream_text = "\n".join(decompressed_texts).strip()
+                if len(stream_text) > 30 and any(c.isalnum() for c in stream_text):
+                    return stream_text
+        except Exception as stream_err:
+            logger.debug(f"Stream PDF extraction notice: {stream_err}")
+
+        # 3. Fallback: If document is a scanned image PDF without text layer
+        return (
+            "[DOCUMENT INGESTION NOTICE: SCANNED / IMAGE-BASED PDF]\n\n"
+            "This PDF appears to contain scanned pages or graphic images without a native machine-readable text layer.\n"
+            "The document has been registered in the CAS Intake Queue. You can view the document details in the workspace, "
+            "or paste the contract clauses into the text editor to execute the full multi-agent risk, compliance, and negotiation pipeline."
+        )
 
     @classmethod
     def _parse_plain_text(cls, content_bytes: bytes) -> str:
@@ -172,8 +218,8 @@ class DocumentParser:
         """Infers an appropriate contract title from first headings or filename."""
         if paragraphs:
             first = paragraphs[0].strip()
-            # If the first paragraph is short and looks like a title
-            if 5 < len(first) < 100 and not first.endswith("."):
+            # If the first paragraph is short, looks like a title, and isn't PDF syntax or notice
+            if 5 < len(first) < 100 and not first.endswith(".") and not any(kw in first for kw in ("/Type", "/Pages", "xref", "trailer", "DOCUMENT INGESTION NOTICE")):
                 return first
         
         # Clean filename

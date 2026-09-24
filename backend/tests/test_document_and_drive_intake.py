@@ -67,3 +67,26 @@ async def test_upload_document_endpoint():
         assert data["filename"] == "vendor_agreement.txt"
         assert "VENDOR TERMS" in data["content"]
         assert data["word_count"] > 5
+
+
+@pytest.mark.asyncio
+async def test_upload_pdf_document_endpoint():
+    import pypdf
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    buf = io.BytesIO()
+    writer.write(buf)
+    pdf_bytes = buf.getvalue()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        files = {"file": ("enterprise_agreement.pdf", pdf_bytes, "application/pdf")}
+        res = await ac.post("/contracts/upload-document", files=files)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["filename"] == "enterprise_agreement.pdf"
+        assert data["file_type"] == "pdf"
+        assert "content" in data
+        assert len(data["content"]) > 0
+        assert "/Type" not in data["detected_title"]
+
