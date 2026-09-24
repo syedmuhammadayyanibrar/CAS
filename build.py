@@ -27,9 +27,19 @@ def main():
     # Build Vite production assets
     run_step("npm --prefix frontend run build", "Compiling frontend SPA bundle")
 
-    dist_index = os.path.join(frontend_dir, "dist", "index.html")
+    dist_dir = os.path.join(frontend_dir, "dist")
+    dist_index = os.path.join(dist_dir, "index.html")
     if os.path.exists(dist_index):
         print(f"SUCCESS: Frontend bundle ready at {dist_index}")
+        import shutil
+        public_dir = os.path.join(base_dir, "public")
+        try:
+            if os.path.exists(public_dir):
+                shutil.rmtree(public_dir)
+            shutil.copytree(dist_dir, public_dir)
+            print(f"SUCCESS: Synced frontend bundle to Vercel public CDN folder ({public_dir})")
+        except Exception as e:
+            print(f"Notice: Could not copy to public folder: {e}")
     else:
         print(f"WARNING: Expected frontend build at {dist_index} was not found.")
 

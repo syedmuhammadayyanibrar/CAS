@@ -46,10 +46,18 @@ async def persist_cas_message(message: CASMessage):
 async def lifespan(app: FastAPI):
     # Startup
     logger.info(f"Starting {settings.PROJECT_NAME} (v{settings.VERSION})...")
-    await init_db()
-    # Subscribe persistence logger to event bus
-    event_bus.subscribe_all(persist_cas_message)
-    logger.info("Subscribed database persistence to CAS event bus.")
+    try:
+        await init_db()
+    except Exception as e:
+        logger.error(f"init_db caught during lifespan startup: {e}")
+
+    try:
+        # Subscribe persistence logger to event bus
+        event_bus.subscribe_all(persist_cas_message)
+        logger.info("Subscribed database persistence to CAS event bus.")
+    except Exception as e:
+        logger.error(f"Event bus subscription error during lifespan: {e}")
+
     yield
     # Shutdown
     logger.info(f"Shutting down {settings.PROJECT_NAME}...")
@@ -85,15 +93,34 @@ app.include_router(evaluation_router)
 import os
 from fastapi import Request
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
-frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
 
+def find_frontend_dist() -> str | None:
+    candidates = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../public")),
+        os.path.abspath("public"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist")),
+        os.path.abspath("frontend/dist"),
+    ]
+    for p in candidates:
+        if os.path.exists(p) and os.path.exists(os.path.join(p, "index.html")):
+            return p
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+frontend_dist = find_frontend_dist()
 
 
 @app.get("/")
 async def root(request: Request):
     accept = request.headers.get("accept", "")
-    if accept.startswith("text/html") and os.path.exists(frontend_dist):
+    if accept.startswith("text/html"):
+        if frontend_dist and os.path.exists(os.path.join(frontend_dist, "index.html")):
+            return FileResponse(os.path.join(frontend_dist, "index.html"))
         return RedirectResponse(url="/ui", status_code=307)
 
     return {
@@ -123,10 +150,7 @@ async def root(request: Request):
 
 
 # Mount built React frontend static assets if present
-import os
-from fastapi.staticfiles import StaticFiles
-
-if os.path.exists(frontend_dist):
+if frontend_dist and os.path.exists(frontend_dist):
     assets_dir = os.path.join(frontend_dist, "assets")
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
@@ -137,19 +161,29 @@ if os.path.exists(frontend_dist):
         fav = os.path.join(frontend_dist, "favicon.svg")
         if os.path.exists(fav):
             return FileResponse(fav)
-        return FileResponse(os.path.join(frontend_dist, "index.html"))
+        index_file = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return {"status": "ok"}
 
     @app.get("/ui")
     @app.get("/ui/")
     async def serve_ui_root():
-        return FileResponse(os.path.join(frontend_dist, "index.html"))
+        index_file = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return {"status": "Frontend build not found"}
 
     @app.get("/ui/{full_path:path}")
     async def serve_ui_spa(full_path: str):
         target = os.path.join(frontend_dist, full_path)
         if os.path.isfile(target):
             return FileResponse(target)
-        return FileResponse(os.path.join(frontend_dist, "index.html"))
+        index_file = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        return {"status": "Frontend build not found"}
+
 
 
 
