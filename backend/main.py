@@ -82,8 +82,20 @@ app.include_router(demo_router)
 app.include_router(evaluation_router)
 
 
+import os
+from fastapi import Request
+from fastapi.responses import FileResponse, RedirectResponse
+
+frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
+
+
+
 @app.get("/")
-async def root():
+async def root(request: Request):
+    accept = request.headers.get("accept", "")
+    if accept.startswith("text/html") and os.path.exists(frontend_dist):
+        return RedirectResponse(url="/ui", status_code=307)
+
     return {
         "system": settings.PROJECT_NAME,
         "version": settings.VERSION,
@@ -113,13 +125,19 @@ async def root():
 # Mount built React frontend static assets if present
 import os
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
-frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist"))
 if os.path.exists(frontend_dist):
     assets_dir = os.path.join(frontend_dist, "assets")
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/favicon.svg")
+    @app.get("/favicon.ico")
+    async def serve_favicon():
+        fav = os.path.join(frontend_dist, "favicon.svg")
+        if os.path.exists(fav):
+            return FileResponse(fav)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
 
     @app.get("/ui")
     @app.get("/ui/")
@@ -132,6 +150,7 @@ if os.path.exists(frontend_dist):
         if os.path.isfile(target):
             return FileResponse(target)
         return FileResponse(os.path.join(frontend_dist, "index.html"))
+
 
 
 if __name__ == "__main__":
