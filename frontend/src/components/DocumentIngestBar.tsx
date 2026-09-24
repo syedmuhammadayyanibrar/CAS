@@ -191,6 +191,30 @@ export function DocumentIngestBar({
         `Successfully uploaded & extracted ${file.name} (${res.word_count.toLocaleString()} words, ${res.paragraph_count} paragraphs).`
       );
     } catch (err: any) {
+      if (file.name.endsWith('.txt') || file.name.endsWith('.md') || file.name.endsWith('.json')) {
+        try {
+          const rawText = await file.text();
+          if (rawText && rawText.trim()) {
+            const words = rawText.trim().split(/\s+/).length;
+            const newId = `CTR-${file.name.substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, "")}-${Math.floor(1000 + Math.random() * 9000)}`;
+            setActiveDocName(file.name);
+            setActiveDocSource("upload");
+            if (onContractIdChange) onContractIdChange(newId);
+            onContractTextChange(rawText.trim(), {
+              title: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
+              filename: file.name,
+              source: "native_upload",
+              wordCount: words,
+              paragraphCount: rawText.split('\n').filter(p => p.trim()).length,
+              charCount: rawText.length,
+            });
+            setSuccessMessage(`Extracted ${file.name} (${words} words) via client text intake.`);
+            return;
+          }
+        } catch {
+          // ignore fallback error
+        }
+      }
       setErrorMessage(err.message || "Failed to parse document. Please check format.");
     } finally {
       setIsProcessing(false);

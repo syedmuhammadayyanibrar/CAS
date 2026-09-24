@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 import tempfile
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
@@ -12,6 +13,9 @@ logger = get_logger("Database")
 
 IS_TESTING = os.getenv("TESTING", "").lower() in ("true", "1", "yes")
 IS_SERVERLESS = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
+
+_db_initialized = False
+_db_init_lock = asyncio.Lock()
 
 
 def _json_serializer(obj):
@@ -26,7 +30,10 @@ def _dumps(obj):
 
 def _get_sqlite_url(db_name: str = "cas_dev.db") -> str:
     if IS_SERVERLESS:
-        temp_dir = tempfile.gettempdir().replace("\\", "/")
+        temp_dir = tempfile.gettempdir().replace("\\", "/").rstrip("/")
+        # On Linux/Unix, absolute paths require 4 slashes: sqlite+aiosqlite:////tmp/cas_dev.db
+        if temp_dir.startswith("/"):
+            return f"sqlite+aiosqlite:///{temp_dir}/{db_name}"
         return f"sqlite+aiosqlite:///{temp_dir}/{db_name}"
     return f"sqlite+aiosqlite:///{db_name}"
 
@@ -47,11 +54,17 @@ def _resolve_database_url() -> tuple[str, bool]:
     elif configured_url.startswith("postgresql://") and not configured_url.startswith("postgresql+asyncpg://"):
         configured_url = configured_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    # In serverless environment (Vercel/Lambda), if DATABASE_URL is default localhost or empty:
-    # do NOT attempt connecting to localhost:5432 because it will timeout / fail
+    # In serverless environment (Vercel/Lambda), or if configured for localhost without active postgres:
     if IS_SERVERLESS and (not configured_url or "localhost" in configured_url or "127.0.0.1" in configured_url):
         logger.info(f"Serverless environment detected (Vercel={IS_SERVERLESS}). Defaulting to serverless SQLite storage.")
         return _get_sqlite_url(), True
+
+    if "postgres" in configured_url:
+        try:
+            import asyncpg  # noqa: F401
+        except ImportError:
+            logger.warning("asyncpg module not available in environment. Defaulting to local SQLite database.")
+            return _get_sqlite_url(), True
 
     if "sqlite" in configured_url:
         return configured_url, True
@@ -63,29 +76,39 @@ ACTIVE_DATABASE_URL, IS_SQLITE = _resolve_database_url()
 
 
 def _create_engine_instance(url: str, is_sqlite: bool):
-    if is_sqlite:
-        if ":memory:" in url:
+    try:
+        if is_sqlite:
+            if ":memory:" in url:
+                return create_async_engine(
+                    url,
+                    echo=False,
+                    json_serializer=_dumps,
+                    poolclass=StaticPool,
+                    connect_args={"check_same_thread": False},
+                )
             return create_async_engine(
                 url,
-                echo=False,
+                echo=settings.DEBUG,
                 json_serializer=_dumps,
-                poolclass=StaticPool,
                 connect_args={"check_same_thread": False},
             )
         return create_async_engine(
             url,
             echo=settings.DEBUG,
+            pool_size=settings.DATABASE_POOL_SIZE,
+            max_overflow=10,
+            pool_pre_ping=True,
             json_serializer=_dumps,
+        )
+    except Exception as e:
+        logger.warning(f"Engine creation failed for {url} ({e}). Falling back to memory SQLite.")
+        return create_async_engine(
+            "sqlite+aiosqlite:///:memory:",
+            echo=False,
+            json_serializer=_dumps,
+            poolclass=StaticPool,
             connect_args={"check_same_thread": False},
         )
-    return create_async_engine(
-        url,
-        echo=settings.DEBUG,
-        pool_size=settings.DATABASE_POOL_SIZE,
-        max_overflow=10,
-        pool_pre_ping=True,
-        json_serializer=_dumps,
-    )
 
 
 engine = _create_engine_instance(ACTIVE_DATABASE_URL, IS_SQLITE)
@@ -103,13 +126,14 @@ async_session_factory = AsyncSessionLocal
 
 async def init_db():
     """Initializes the database schema tables with multi-tier fallback."""
-    global engine, AsyncSessionLocal
+    global engine, AsyncSessionLocal, _db_initialized
 
     # Tier 1: Try current engine
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info(f"Database schema initialized successfully on {engine.url.render_as_string(hide_password=True)}")
+        _db_initialized = True
         return
     except Exception as e:
         logger.warning(f"Primary database connection error on {engine.url.render_as_string(hide_password=True)}: {e}")
@@ -123,6 +147,7 @@ async def init_db():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("SQLite database initialized successfully.")
+        _db_initialized = True
         return
     except Exception as sqlite_err:
         logger.warning(f"File SQLite initialization failed: {sqlite_err}. Falling back to in-memory SQLite...")
@@ -135,12 +160,23 @@ async def init_db():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         logger.info("In-memory SQLite database initialized successfully.")
+        _db_initialized = True
     except Exception as mem_err:
         logger.error(f"In-memory SQLite initialization error: {mem_err}")
 
 
+async def ensure_db_initialized():
+    """Guarantees database tables exist even in serverless environments where lifespan was skipped."""
+    global _db_initialized
+    if not _db_initialized:
+        async with _db_init_lock:
+            if not _db_initialized:
+                await init_db()
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for providing database sessions to FastAPI routes."""
+    await ensure_db_initialized()
     async with AsyncSessionLocal() as session:
         try:
             yield session

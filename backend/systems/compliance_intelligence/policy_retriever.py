@@ -5,6 +5,74 @@ from backend.core.logging import get_logger
 
 logger = get_logger("PolicyRetriever")
 
+DEFAULT_POLICY_DICT: Dict[str, Any] = {
+    "policy_id": "CORP-POL-2026-v2",
+    "policy_name": "Enterprise Vendor Risk & Commercial Compliance Policy",
+    "effective_date": "2026-01-01",
+    "version": "2.4",
+    "rules": [
+        {
+            "rule_id": "RULE-001",
+            "rule_name": "Mutual Liability Limitation & Minimum Cap",
+            "target_clause_types": ["LIABILITY", "LIMITATION_OF_LIABILITY"],
+            "field_matches": ["liability", "aggregate liability", "cap", "limitation of liability"],
+            "requirement": "Liability caps must be mutual. Vendor aggregate liability cap must not be lower than the total fees paid or payable in the preceding twelve (12) months. One-month or three-month caps are prohibited.",
+            "criticality": "HIGH",
+            "prohibited_terms": ["one (1) month", "1 month", "solely to vendor's fees paid in thirty days"],
+            "remediation": "Insist on 12-month trailing fees mutual liability cap."
+        },
+        {
+            "rule_id": "RULE-002",
+            "rule_name": "Mutual Indemnification & Carveout Limits",
+            "target_clause_types": ["INDEMNITY", "INDEMNIFICATION"],
+            "field_matches": ["indemnify", "hold harmless", "defense", "indemnification"],
+            "requirement": "Customer shall not accept uncapped, open-ended indemnity for third-party claims. Indemnity obligations must be strictly limited to direct IP infringement or gross negligence, and subject to liability caps.",
+            "criticality": "CRITICAL",
+            "prohibited_terms": ["without financial limitation", "without limitation", "unlimited indemnity"],
+            "remediation": "Strike 'without financial limitation' and limit indemnity to gross negligence or intentional misconduct."
+        },
+        {
+            "rule_id": "RULE-003",
+            "rule_name": "Permitted Governing Law Jurisdictions",
+            "target_clause_types": ["GOVERNING_LAW", "JURISDICTION"],
+            "field_matches": ["governing law", "jurisdiction", "laws of the state"],
+            "requirement": "Governing law must be Delaware, California, or New York. Foreign or disadvantageous jurisdictions require General Counsel approval.",
+            "criticality": "MEDIUM",
+            "permitted_values": ["Delaware", "California", "New York"],
+            "remediation": "Designate Delaware or New York governing law."
+        },
+        {
+            "rule_id": "RULE-004",
+            "rule_name": "Minimum Termination Notice Period",
+            "target_clause_types": ["TERMINATION"],
+            "field_matches": ["termination", "terminate", "cure period", "notice"],
+            "requirement": "Termination notice for convenience or material breach cure must be at least thirty (30) days. 10-day summary termination without cause is prohibited.",
+            "criticality": "HIGH",
+            "prohibited_terms": ["ten (10) days notice", "10 days email notice"],
+            "remediation": "Enforce standard 30-day notice and cure period."
+        },
+        {
+            "rule_id": "RULE-005",
+            "rule_name": "Customer Data Ownership & Model Training Exclusion",
+            "target_clause_types": ["DATA_OWNERSHIP", "INTELLECTUAL_PROPERTY"],
+            "field_matches": ["customer data", "train models", "derivative works", "irrevocable license"],
+            "requirement": "Vendor may not receive perpetual or irrevocable rights to use Customer Confidential Data for training generative models or commercial derivative products.",
+            "criticality": "HIGH",
+            "prohibited_terms": ["perpetual, irrevocable", "train machine learning models"],
+            "remediation": "Restrict data usage strictly to providing the contracted service during the active term."
+        },
+        {
+            "rule_id": "RULE-006",
+            "rule_name": "SLA Minimum Availability & Fair Remedies",
+            "target_clause_types": ["SLA", "SERVICE_LEVEL"],
+            "field_matches": ["uptime", "sla", "availability", "service credits"],
+            "requirement": "Platform uptime must be at least 99.9%. Service credits must escalate with outage severity and Customer must be granted termination rights if SLA is breached for three consecutive months.",
+            "criticality": "MEDIUM",
+            "remediation": "Add recurring breach termination right and clarify maintenance windows."
+        }
+    ]
+}
+
 
 class PolicyRetriever:
     """
@@ -17,17 +85,14 @@ class PolicyRetriever:
     @classmethod
     def load_policy(cls, policy_path: str = None) -> Dict[str, Any]:
         path = policy_path or cls.DEFAULT_POLICY_PATH
-        path = os.path.abspath(path)
-        if not os.path.exists(path):
-            logger.warning(f"Policy file not found at {path}. Returning default baseline policy.")
-            return {
-                "policy_id": "DEFAULT-FALLBACK",
-                "policy_name": "Standard Enterprise Policy",
-                "rules": []
-            }
+        if path and os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    policy_data = json.load(f)
+                logger.info(f"Loaded policy '{policy_data.get('policy_name')}' with {len(policy_data.get('rules', []))} rules.")
+                return policy_data
+            except Exception as e:
+                logger.warning(f"Error loading policy from {path}: {e}. Using embedded corporate default.")
 
-        with open(path, "r", encoding="utf-8") as f:
-            policy_data = json.load(f)
-
-        logger.info(f"Loaded policy '{policy_data.get('policy_name')}' with {len(policy_data.get('rules', []))} rules.")
-        return policy_data
+        logger.info(f"Using embedded corporate compliance policy with {len(DEFAULT_POLICY_DICT.get('rules', []))} rules.")
+        return DEFAULT_POLICY_DICT

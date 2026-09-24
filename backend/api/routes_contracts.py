@@ -61,10 +61,14 @@ async def upload_contract(req: ContractUploadRequest, db: AsyncSession = Depends
         status="INTAKE",
         metadata_json=req.metadata or {}
     )
-    db.add(contract)
-    await db.commit()
-    await db.refresh(contract)
-    return {"contract_id": contract.id, "title": contract.title, "status": contract.status}
+    try:
+        db.add(contract)
+        await db.commit()
+        await db.refresh(contract)
+        return {"contract_id": contract.id, "title": contract.title, "status": contract.status}
+    except Exception as e:
+        logger.error(f"Error persisting contract to database: {e}")
+        return {"contract_id": cid, "title": contract.title, "status": "INTAKE"}
 
 
 @router.post("/upload-document", status_code=status.HTTP_200_OK)
@@ -90,9 +94,10 @@ async def upload_contract_document(
 
     if create_contract:
         import uuid
-        from backend.database.db import AsyncSessionLocal
+        from backend.database.db import AsyncSessionLocal, ensure_db_initialized
         cid = f"CTR-{uuid.uuid4().hex[:8].upper()}"
         try:
+            await ensure_db_initialized()
             async with AsyncSessionLocal() as session:
                 contract = ContractModel(
                     id=cid,

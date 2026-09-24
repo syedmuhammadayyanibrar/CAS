@@ -25,11 +25,8 @@ console = Console(legacy_windows=False)
 
 
 async def run_end_to_end_demo():
-    contract_file = os.path.join(os.path.dirname(__file__), "../contracts/enterprise_saas_vendor_contract.txt")
-    policy_file = os.path.join(os.path.dirname(__file__), "../policies/corporate_compliance_policy.json")
-
-    with open(contract_file, "r", encoding="utf-8") as f:
-        contract_text = f.read()
+    from backend.api.routes_demo import get_demo_files
+    contract_text, policy_file = get_demo_files()
 
     cid = "CTR-DEMO-2026-SAAS"
 

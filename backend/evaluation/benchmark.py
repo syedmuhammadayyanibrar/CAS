@@ -18,11 +18,8 @@ console = Console(legacy_windows=False)
 
 
 async def run_benchmark():
-    contract_path = os.path.join(os.path.dirname(__file__), "../../contracts/enterprise_saas_vendor_contract.txt")
-    policy_path = os.path.join(os.path.dirname(__file__), "../../policies/corporate_compliance_policy.json")
-
-    with open(contract_path, "r", encoding="utf-8") as f:
-        contract_text = f.read()
+    from backend.api.routes_demo import get_demo_files
+    contract_text, policy_path = get_demo_files()
 
     console.print("[bold blue]====================================================[/bold blue]")
     console.print("[bold cyan] RUNNING CONTRACT AGENTIC SOCIETY (CAS) BENCHMARK [/bold cyan]")

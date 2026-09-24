@@ -298,8 +298,8 @@ export async function uploadContractDocument(file: File, createContract: boolean
     body: formData,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Upload failed" }));
-    throw new Error(err.detail || "Failed to upload and parse document");
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Upload failed` }));
+    throw new Error(err.detail || `Failed to upload and parse document (status ${res.status})`);
   }
   return res.json();
 }
