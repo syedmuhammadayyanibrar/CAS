@@ -16,6 +16,7 @@ import { fetchReviews } from "./api/client";
 
 function AppLayout() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +25,11 @@ function AppLayout() {
     fetchReviews("PENDING")
       .then((data) => setPendingReviewsCount(data.length))
       .catch(() => {});
+  }, [location.pathname]);
+
+  // Automatically close sidebar when navigating to a new route
+  useEffect(() => {
+    setIsSidebarOpen(false);
   }, [location.pathname]);
 
   const getHeaderInfo = (): { title: string; subtitle?: string } => {
@@ -81,12 +87,18 @@ function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-[#F7F8FA] text-[#111827]">
-      <Sidebar pendingApprovalsCount={pendingReviewsCount} />
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        pendingApprovalsCount={pendingReviewsCount}
+      />
       <div className="flex-1 flex flex-col min-w-0">
         <Header
           title={headerInfo.title}
           subtitle={headerInfo.subtitle}
           onNewContract={() => setIsModalOpen(true)}
+          onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
+          isSidebarOpen={isSidebarOpen}
         />
         <main className="flex-1 pb-12 overflow-y-auto">
           <Routes>
