@@ -185,13 +185,22 @@ class RunStepRequest(BaseModel):
 @router.post("/run-step")
 async def run_demo_step(req: RunStepRequest, db: AsyncSession = Depends(get_db)):
     """Executes a single stage (1 through 15) of the autonomous multi-agent bidirectional scenario."""
+    await ensure_db_initialized()
     step = req.step
     contract_text, policy_file = get_demo_files()
 
-    contract = await db.get(ContractModel, DEMO_CONTRACT_ID)
-    if not contract:
-        await reset_demo(db)
+    contract = None
+    try:
         contract = await db.get(ContractModel, DEMO_CONTRACT_ID)
+    except Exception as e:
+        logger.warning(f"Error fetching demo contract: {e}")
+
+    if not contract:
+        try:
+            await reset_demo(db)
+            contract = await db.get(ContractModel, DEMO_CONTRACT_ID)
+        except Exception as reset_err:
+            logger.warning(f"Error resetting demo contract on demand: {reset_err}")
 
     if step == 1:
         # Stage 1: Contract Intake through Fastn Inbound Trigger
@@ -210,8 +219,14 @@ async def run_demo_step(req: RunStepRequest, db: AsyncSession = Depends(get_db))
                 "fastn_response": {"status": "accepted", "note": f"Fastn inbound simulation: {e}"},
                 "contractId": DEMO_CONTRACT_ID,
             }
-        contract.status = "INTAKE"
-        await db.commit()
+        
+        try:
+            if contract:
+                contract.status = "INTAKE"
+                await db.commit()
+        except Exception as commit_err:
+            logger.warning(f"Contract status update commit notice: {commit_err}")
+
         return {
             "step": 1,
             "title": "Contract Intake via Fastn Inbound Trigger",

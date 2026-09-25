@@ -289,6 +289,43 @@ export async function uploadContract(title: string, content: string, metadata?: 
 }
 
 export async function uploadContractDocument(file: File, createContract: boolean = false): Promise<DocumentParseResult> {
+  // 1. Convert file to Base64 in the browser (clean, reliable, zero multipart/spool issues)
+  let base64Data = "";
+  try {
+    base64Data = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const res = reader.result as string;
+        const comma = res.indexOf(",");
+        resolve(comma >= 0 ? res.substring(comma + 1) : res);
+      };
+      reader.onerror = () => reject(new Error("Failed to read file locally"));
+      reader.readAsDataURL(file);
+    });
+  } catch (readErr) {
+    console.warn("FileReader failed, will try multipart:", readErr);
+  }
+
+  // 2. Try JSON base64 extraction via /contracts/extract-text (zero multipart dependency)
+  if (base64Data) {
+    try {
+      const jsonRes = await fetch(`${API_BASE}/contracts/extract-text`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          base64_data: base64Data,
+        }),
+      });
+      if (jsonRes.ok) {
+        return await jsonRes.json();
+      }
+    } catch (jsonErr) {
+      console.warn("JSON extract-text attempt failed, falling back to upload-document:", jsonErr);
+    }
+  }
+
+  // 3. Fallback: multipart /contracts/upload-document
   const formData = new FormData();
   formData.append("file", file);
   formData.append("create_contract", String(createContract));
@@ -425,7 +462,10 @@ export async function fetchMemories(tags?: string, type?: string): Promise<{ mem
 
 export async function resetDemo(): Promise<any> {
   const res = await fetch(`${API_BASE}/demo/reset`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to reset demo");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Reset failed` }));
+    throw new Error(err.detail || `Failed to reset demo (status ${res.status})`);
+  }
   return res.json();
 }
 
@@ -435,7 +475,10 @@ export async function runDemoStep(step: number): Promise<any> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ step }),
   });
-  if (!res.ok) throw new Error(`Failed to execute demo step ${step}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Step ${step} execution failed` }));
+    throw new Error(err.detail || `Failed to execute demo step ${step} (status ${res.status})`);
+  }
   return res.json();
 }
 

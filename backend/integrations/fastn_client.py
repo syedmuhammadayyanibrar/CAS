@@ -278,7 +278,7 @@ class FastnClient:
                     completed_at=now,
                 )
                 db_session.add(db_exec)
-                await db_session.commit()
+                await db_session.flush()
             except Exception as e:
                 logger.warning(f"Could not persist FastnExecutionModel: {e}")
 
