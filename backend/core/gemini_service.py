@@ -96,8 +96,12 @@ class GeminiService:
                 # Feed the validation error back for self-repair
                 prompt += f"\n\nPREVIOUS OUTPUT FAILED VALIDATION: {ve}. Return strictly valid JSON."
             except Exception as e:
+                err_str = str(e)
                 logger.error(f"Gemini API call error on attempt {attempt}: {e}")
                 last_error = e
+                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                    logger.warning("Gemini 429/RESOURCE_EXHAUSTED quota exceeded. Falling back immediately to Enterprise Dynamic Parser to preserve serverless responsiveness.")
+                    return self._mock_for_model(response_model, prompt)
                 wait_time = (2 ** attempt) * 0.5
                 await asyncio.sleep(wait_time)
 

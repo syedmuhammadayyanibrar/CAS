@@ -257,9 +257,19 @@ export async function fetchContracts(): Promise<ContractSummary[]> {
 }
 
 export async function fetchContractDetail(id: string): Promise<ContractDetail> {
-  const res = await fetch(`${API_BASE}/contracts/${id}`);
-  if (!res.ok) throw new Error(`Failed to fetch contract ${id}`);
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/contracts/${id}`);
+    if (res.ok) return await res.json();
+  } catch {}
+
+  // Fallback to client local cache for serverless environments
+  const cached = localStorage.getItem(`cas_contract_${id}`);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch {}
+  }
+  throw new Error(`Failed to fetch contract ${id}`);
 }
 
 export async function fetchContractAnalysis(id: string): Promise<FullAnalysis> {
@@ -268,13 +278,34 @@ export async function fetchContractAnalysis(id: string): Promise<FullAnalysis> {
   return res.json();
 }
 
-export async function triggerMeshAnalysis(id: string, objective?: string): Promise<any> {
+export async function triggerMeshAnalysis(id: string, objective?: string, contractText?: string, title?: string): Promise<any> {
+  // If not supplied, attempt reading from client cache
+  let text = contractText;
+  let t = title;
+  if (!text) {
+    const cached = localStorage.getItem(`cas_contract_${id}`);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        text = parsed.raw_text;
+        t = parsed.title;
+      } catch {}
+    }
+  }
+
   const res = await fetch(`${API_BASE}/contracts/${id}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ objective }),
+    body: JSON.stringify({
+      objective,
+      contract_text: text,
+      title: t,
+    }),
   });
-  if (!res.ok) throw new Error(`Failed to trigger analysis for ${id}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Failed to trigger analysis` }));
+    throw new Error(err.detail || `Failed to trigger analysis for ${id} (status ${res.status})`);
+  }
   return res.json();
 }
 
@@ -284,8 +315,22 @@ export async function uploadContract(title: string, content: string, metadata?: 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, content, metadata }),
   });
-  if (!res.ok) throw new Error("Failed to upload contract");
-  return res.json();
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Upload failed` }));
+    throw new Error(err.detail || "Failed to upload contract");
+  }
+  const data = await res.json();
+  if (data?.contract_id) {
+    try {
+      localStorage.setItem(`cas_contract_${data.contract_id}`, JSON.stringify({
+        id: data.contract_id,
+        title: title || data.title,
+        raw_text: content,
+        status: data.status || "INTAKE",
+      }));
+    } catch {}
+  }
+  return data;
 }
 
 export async function uploadContractDocument(file: File, createContract: boolean = false): Promise<DocumentParseResult> {

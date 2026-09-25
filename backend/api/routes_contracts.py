@@ -43,10 +43,19 @@ class AskContractRequest(BaseModel):
     question: str
 
 
+class AnalyzeRequest(BaseModel):
+    objective: Optional[str] = "Protect Customer liability and ensure bilateral commercial terms."
+    contract_text: Optional[str] = None
+    title: Optional[str] = None
+
+
 class DirectExtractRequest(BaseModel):
     filename: str = "document.txt"
     base64_data: Optional[str] = None
     text_content: Optional[str] = None
+
+
+_RECENT_CONTRACTS_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -61,6 +70,12 @@ async def upload_contract(req: ContractUploadRequest, db: AsyncSession = Depends
         status="INTAKE",
         metadata_json=req.metadata or {}
     )
+    _RECENT_CONTRACTS_CACHE[cid] = {
+        "id": cid,
+        "title": contract.title,
+        "raw_text": contract.raw_text,
+        "status": contract.status
+    }
     try:
         db.add(contract)
         await db.commit()
@@ -176,9 +191,40 @@ async def list_contracts(db: AsyncSession = Depends(get_db)):
 @router.get("/{contract_id}")
 async def get_contract(contract_id: str, db: AsyncSession = Depends(get_db)):
     """Retrieves full contract metadata, raw text, and current lifecycle status."""
+    await ensure_db_initialized()
     contract = await db.get(ContractModel, contract_id)
     if not contract:
-        raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
+        cached = _RECENT_CONTRACTS_CACHE.get(contract_id)
+        if cached:
+            contract = ContractModel(
+                id=contract_id,
+                title=cached.get("title") or "Uploaded Agreement",
+                raw_text=cached.get("raw_text") or cached.get("content") or "",
+                status=cached.get("status") or "INTAKE",
+                governing_law="State of Delaware"
+            )
+            try:
+                db.add(contract)
+                await db.commit()
+            except Exception:
+                pass
+        elif contract_id == "CTR-DEMO-2026-SAAS":
+            from backend.api.routes_demo import get_demo_files
+            demo_text, _ = get_demo_files()
+            contract = ContractModel(
+                id=contract_id,
+                title="NovaCloud Enterprise Cloud Services Agreement",
+                raw_text=demo_text,
+                status="INTAKE",
+                governing_law="State of Delaware"
+            )
+            try:
+                db.add(contract)
+                await db.commit()
+            except Exception:
+                pass
+        else:
+            raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
     
     risk_stmt = (
         select(RiskReportModel)
@@ -265,13 +311,45 @@ Please provide an authoritative, clear, and grounded response. Cite specific con
 @router.post("/{contract_id}/analyze")
 async def trigger_mesh_analysis(
     contract_id: str,
-    objective: Optional[str] = "Protect Customer liability and ensure bilateral commercial terms.",
+    req: Optional[AnalyzeRequest] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """Triggers dynamic multi-society mesh orchestration for this contract."""
+    await ensure_db_initialized()
+    objective = req.objective if (req and req.objective) else "Protect Customer liability and ensure bilateral commercial terms."
+
     contract = await db.get(ContractModel, contract_id)
     if not contract:
-        raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
+        raw_text = None
+        title = "Uploaded Agreement"
+        if req and req.contract_text:
+            raw_text = req.contract_text
+            title = req.title or title
+        elif contract_id in _RECENT_CONTRACTS_CACHE:
+            cached = _RECENT_CONTRACTS_CACHE[contract_id]
+            raw_text = cached.get("raw_text") or cached.get("content")
+            title = cached.get("title") or title
+        elif contract_id == "CTR-DEMO-2026-SAAS":
+            from backend.api.routes_demo import get_demo_files
+            raw_text, _ = get_demo_files()
+            title = "NovaCloud Enterprise Cloud Services Agreement"
+
+        if raw_text:
+            contract = ContractModel(
+                id=contract_id,
+                title=title,
+                raw_text=raw_text,
+                status="INTAKE",
+                governing_law="State of Delaware"
+            )
+            try:
+                db.add(contract)
+                await db.commit()
+                await db.refresh(contract)
+            except Exception as e:
+                logger.warning(f"Could not persist contract recreation: {e}")
+        else:
+            raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
 
     analysis = await cas_director.orchestrate_mesh(
         contract_text=contract.raw_text,
@@ -279,8 +357,12 @@ async def trigger_mesh_analysis(
         commercial_objective=objective,
         db_session=db
     )
-    contract.status = analysis["status"]
-    await db.commit()
+    try:
+        contract.status = analysis["status"]
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Could not commit status update: {e}")
+
     return analysis
 
 

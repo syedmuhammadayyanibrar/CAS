@@ -104,7 +104,7 @@ export function ContractWorkspaceView() {
     });
 
     try {
-      await triggerMeshAnalysis(contractId);
+      await triggerMeshAnalysis(contractId, undefined, contract?.raw_text, contract?.title);
       await loadData();
       setSuccessMsg("Dynamic Multi-Society analysis completed.");
       setActiveTab("risks");
