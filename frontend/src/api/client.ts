@@ -273,9 +273,26 @@ export async function fetchContractDetail(id: string): Promise<ContractDetail> {
 }
 
 export async function fetchContractAnalysis(id: string): Promise<FullAnalysis> {
-  const res = await fetch(`${API_BASE}/contracts/${id}/analysis`);
-  if (!res.ok) throw new Error(`Failed to fetch analysis for ${id}`);
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/contracts/${id}/analysis`);
+    if (res.ok) return await res.json();
+  } catch {}
+
+  const cached = localStorage.getItem(`cas_analysis_${id}`);
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      return {
+        contract_id: id,
+        graph: parsed.contract_graph || parsed.graph,
+        risk_report: parsed.risk_report,
+        compliance_report: parsed.compliance_report,
+        negotiation_strategy: parsed.negotiation_strategy,
+        dispute_assessment: parsed.dispute_assessment,
+      };
+    } catch {}
+  }
+  throw new Error(`Failed to fetch analysis for ${id}`);
 }
 
 export async function triggerMeshAnalysis(id: string, objective?: string, contractText?: string, title?: string): Promise<any> {
@@ -306,7 +323,13 @@ export async function triggerMeshAnalysis(id: string, objective?: string, contra
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Failed to trigger analysis` }));
     throw new Error(err.detail || `Failed to trigger analysis for ${id} (status ${res.status})`);
   }
-  return res.json();
+  const data = await res.json();
+  if (data) {
+    try {
+      localStorage.setItem(`cas_analysis_${id}`, JSON.stringify(data));
+    } catch {}
+  }
+  return data;
 }
 
 export async function uploadContract(title: string, content: string, metadata?: any): Promise<any> {

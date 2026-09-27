@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from backend.director.execution_tracker import execution_tracker
 from backend.core.document_parser import DocumentParser
 
-from backend.database.db import get_db
+from backend.database.db import get_db, ensure_db_initialized, AsyncSessionLocal
 from backend.database.schema import (
     ContractModel,
     ContractGraphModel,
@@ -351,19 +351,28 @@ async def trigger_mesh_analysis(
         else:
             raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
 
-    analysis = await cas_director.orchestrate_mesh(
-        contract_text=contract.raw_text,
-        contract_id=contract_id,
-        commercial_objective=objective,
-        db_session=db
-    )
     try:
-        contract.status = analysis["status"]
-        await db.commit()
-    except Exception as e:
-        logger.warning(f"Could not commit status update: {e}")
+        analysis = await cas_director.orchestrate_mesh(
+            contract_text=contract.raw_text,
+            contract_id=contract_id,
+            commercial_objective=objective,
+            db_session=db
+        )
+        try:
+            contract.status = analysis["status"]
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"Could not commit status update: {e}")
 
-    return analysis
+        return analysis
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to orchestrate mesh analysis for {contract_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Analysis orchestration failed: {str(e)}"
+        )
 
 
 @router.get("/{contract_id}/analysis")

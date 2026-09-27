@@ -48,6 +48,7 @@ class GeminiService:
         max_attempts = retries if retries is not None else settings.GEMINI_MAX_RETRIES
 
         is_testing = os.getenv("TESTING", "").lower() in ("true", "1", "yes")
+        is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
         if not self.is_configured or is_testing:
             if is_testing:
                 logger.debug(f"[TESTING] Using dynamic parser for {response_model.__name__}.")
@@ -56,11 +57,14 @@ class GeminiService:
             return self._mock_for_model(response_model, prompt)
 
         last_error = None
-        for attempt in range(1, max_attempts + 1):
+        call_timeout = 4.5 if is_serverless else 12.0
+        attempts_to_run = 1 if is_serverless else max_attempts
+
+        for attempt in range(1, attempts_to_run + 1):
             try:
                 start_time = time.time()
                 logger.info(
-                    f"Calling Gemini API [Model: {self.model}, Attempt: {attempt}/{max_attempts}, "
+                    f"Calling Gemini API [Model: {self.model}, Attempt: {attempt}/{attempts_to_run}, "
                     f"Target Model: {response_model.__name__}]"
                 )
 
@@ -71,9 +75,9 @@ class GeminiService:
                     temperature=temp,
                 )
 
-                # Async call via google-genai client
+                # Async call via google-genai client with timeout protection
                 loop = asyncio.get_running_loop()
-                response = await loop.run_in_executor(
+                call_coro = loop.run_in_executor(
                     None,
                     lambda: self._client.models.generate_content(
                         model=self.model,
@@ -81,6 +85,7 @@ class GeminiService:
                         config=config
                     )
                 )
+                response = await asyncio.wait_for(call_coro, timeout=call_timeout)
 
                 raw_text = response.text or "{}"
                 duration = time.time() - start_time
@@ -90,17 +95,22 @@ class GeminiService:
                 parsed = response_model.model_validate_json(raw_text)
                 return parsed
 
+            except asyncio.TimeoutError:
+                logger.warning(f"Gemini API call timed out after {call_timeout}s. Falling back immediately to Enterprise Dynamic Parser.")
+                return self._mock_for_model(response_model, prompt)
             except ValidationError as ve:
                 logger.warning(f"Gemini output validation error on attempt {attempt}: {ve}")
                 last_error = ve
-                # Feed the validation error back for self-repair
+                if is_serverless:
+                    return self._mock_for_model(response_model, prompt)
                 prompt += f"\n\nPREVIOUS OUTPUT FAILED VALIDATION: {ve}. Return strictly valid JSON."
             except Exception as e:
                 err_str = str(e)
                 logger.error(f"Gemini API call error on attempt {attempt}: {e}")
                 last_error = e
-                if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
-                    logger.warning("Gemini 429/RESOURCE_EXHAUSTED quota exceeded. Falling back immediately to Enterprise Dynamic Parser to preserve serverless responsiveness.")
+                # Fall back immediately on quota (429), high demand / unavailable (503), or if on serverless
+                if is_serverless or "429" in err_str or "503" in err_str or "UNAVAILABLE" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                    logger.warning(f"Gemini capacity/quota error or serverless mode. Falling back immediately to Enterprise Dynamic Parser: {err_str[:120]}")
                     return self._mock_for_model(response_model, prompt)
                 wait_time = (2 ** attempt) * 0.5
                 await asyncio.sleep(wait_time)
@@ -123,6 +133,8 @@ class GeminiService:
             logger.warning("Gemini API key not configured. Returning fallback response.")
             return f"[Enterprise Legal Adjudication & Synthetic Resolution based on: {prompt[:100]}...]"
 
+        is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME") or os.getenv("LAMBDA_TASK_ROOT"))
+        call_timeout = 6.0 if is_serverless else 15.0
         temp = temperature if temperature is not None else settings.GEMINI_TEMPERATURE
         config = types.GenerateContentConfig(
             system_instruction=system_instruction,
@@ -131,7 +143,7 @@ class GeminiService:
 
         try:
             loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(
+            call_coro = loop.run_in_executor(
                 None,
                 lambda: self._client.models.generate_content(
                     model=self.model,
@@ -139,6 +151,7 @@ class GeminiService:
                     config=config
                 )
             )
+            response = await asyncio.wait_for(call_coro, timeout=call_timeout)
             return response.text or ""
         except Exception as e:
             logger.warning(f"Gemini generate_text encountered error ({e}). Returning structured legal synthesis.")

@@ -369,27 +369,30 @@ class CASDirector:
 
         # Persist concurrent results sequentially if db_session provided
         if db_session:
-            db_risk = RiskReportModel(
-                contract_id=cid,
-                overall_score=risk_report.overall_risk_score,
-                requires_escalation=risk_report.requires_human_escalation,
-                report_json=risk_report.model_dump(mode="json")
-            )
-            db_session.add(db_risk)
-            db_comp = ComplianceReportModel(
-                contract_id=cid,
-                policy_name=comp_report.policy_name,
-                overall_status=comp_report.overall_status,
-                report_json=comp_report.model_dump(mode="json")
-            )
-            db_session.add(db_comp)
-            db_disp = DisputeAssessmentModel(
-                contract_id=cid,
-                overall_dispute_risk=disp_assessment.overall_dispute_risk,
-                assessment_json=disp_assessment.model_dump(mode="json")
-            )
-            db_session.add(db_disp)
-            await db_session.commit()
+            try:
+                db_risk = RiskReportModel(
+                    contract_id=cid,
+                    overall_score=risk_report.overall_risk_score,
+                    requires_escalation=risk_report.requires_human_escalation,
+                    report_json=risk_report.model_dump(mode="json")
+                )
+                db_session.add(db_risk)
+                db_comp = ComplianceReportModel(
+                    contract_id=cid,
+                    policy_name=comp_report.policy_name,
+                    overall_status=comp_report.overall_status,
+                    report_json=comp_report.model_dump(mode="json")
+                )
+                db_session.add(db_comp)
+                db_disp = DisputeAssessmentModel(
+                    contract_id=cid,
+                    overall_dispute_risk=disp_assessment.overall_dispute_risk,
+                    assessment_json=disp_assessment.model_dump(mode="json")
+                )
+                db_session.add(db_disp)
+                await db_session.commit()
+            except Exception as e:
+                logger.warning(f"Failed to persist concurrent reports in database: {e}")
 
         # Phase B.1: Fastn Outbound Alerts for Risk, Compliance, and Dispute
         if risk_report.requires_human_escalation or risk_report.overall_risk_score >= 0.7:
@@ -670,15 +673,18 @@ class CASDirector:
 
             # Persist review request in PostgreSQL
             if db_session:
-                review_rec = HumanReviewModel(
-                    review_id=hitl_request["review_id"],
-                    contract_id=cid,
-                    reason=reason_str,
-                    status="PENDING",
-                    review_json=hitl_request
-                )
-                db_session.add(review_rec)
-                await db_session.commit()
+                try:
+                    review_rec = HumanReviewModel(
+                        review_id=hitl_request["review_id"],
+                        contract_id=cid,
+                        reason=reason_str,
+                        status="PENDING",
+                        review_json=hitl_request
+                    )
+                    db_session.add(review_rec)
+                    await db_session.commit()
+                except Exception as e:
+                    logger.warning(f"Could not persist human review to database: {e}")
 
             # Pause execution for HITL
             await execution_tracker.emit_event(
@@ -711,21 +717,24 @@ class CASDirector:
 
         # 8. Record Director Audit Event
         if db_session:
-            audit = AuditEventModel(
-                audit_id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
-                contract_id=cid,
-                society_or_source="CAS_DIRECTOR",
-                action="MESH_ORCHESTRATION_COMPLETED",
-                details_json={
-                    "activated_societies": routing.selected_societies,
-                    "risk_score": risk_report.overall_risk_score,
-                    "compliance_status": comp_report.overall_status,
-                    "hitl_required": hitl_required,
-                    "conflicts_count": len(detected_conflicts)
-                }
-            )
-            db_session.add(audit)
-            await db_session.commit()
+            try:
+                audit = AuditEventModel(
+                    audit_id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+                    contract_id=cid,
+                    society_or_source="CAS_DIRECTOR",
+                    action="MESH_ORCHESTRATION_COMPLETED",
+                    details_json={
+                        "activated_societies": routing.selected_societies,
+                        "risk_score": risk_report.overall_risk_score,
+                        "compliance_status": comp_report.overall_status,
+                        "hitl_required": hitl_required,
+                        "conflicts_count": len(detected_conflicts)
+                    }
+                )
+                db_session.add(audit)
+                await db_session.commit()
+            except Exception as e:
+                logger.warning(f"Could not persist director audit event to database: {e}")
 
         return {
             "contract_id": cid,

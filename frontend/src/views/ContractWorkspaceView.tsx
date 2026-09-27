@@ -104,8 +104,18 @@ export function ContractWorkspaceView() {
     });
 
     try {
-      await triggerMeshAnalysis(contractId, undefined, contract?.raw_text, contract?.title);
+      const result = await triggerMeshAnalysis(contractId, undefined, contract?.raw_text, contract?.title);
       await loadData();
+      if (result) {
+        setAnalysis((prev) => prev || {
+          contract_id: contractId,
+          graph: result.contract_graph,
+          risk_report: result.risk_report,
+          compliance_report: result.compliance_report,
+          negotiation_strategy: result.negotiation_strategy,
+          dispute_assessment: result.dispute_assessment,
+        });
+      }
       setSuccessMsg("Dynamic Multi-Society analysis completed.");
       setActiveTab("risks");
     } catch (err: any) {
