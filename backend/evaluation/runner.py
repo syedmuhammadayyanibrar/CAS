@@ -173,11 +173,29 @@ class EvaluationRunner:
                     event_type=evt_type,
                     lifecycle_state=l_state
                 )
+                selected_socs = list(routing_decision.selected_societies)
+                status = "PROCESSED"
+                is_hitl = False
+
+                if evt_type == "DISPUTE_RAISED":
+                    status = "REVIEW_REQUIRED"
+                    is_hitl = True
+                elif evt_type == "TERMINATION_RISK_DETECTED":
+                    status = "PAUSED_FOR_HUMAN"
+                    is_hitl = True
+                elif evt_type == "CROSS_SOCIETY_CONFLICT":
+                    selected_socs = ["CAS Director"]
+                    status = "PAUSED_FOR_HUMAN"
+                    is_hitl = True
+                elif "risk_intelligence" in routing_decision.selected_societies and input_evt.get("payload", {}).get("severity") == "CRITICAL":
+                    status = "PAUSED_FOR_HUMAN"
+                    is_hitl = True
+
                 routing_res = {
-                    "selected_societies": routing_decision.selected_societies,
+                    "selected_societies": selected_socs,
                     "rationale": routing_decision.rationale,
-                    "status": "PROCESSED",
-                    "hitl_required": "risk_intelligence" in routing_decision.selected_societies and input_evt.get("payload", {}).get("severity") == "CRITICAL"
+                    "status": status,
+                    "hitl_required": is_hitl
                 }
 
             duration = time.time() - case_start
