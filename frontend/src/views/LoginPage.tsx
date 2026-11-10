@@ -1,6 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Shield, User, Lock, Mail, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
 
 export function LoginPage() {
   const { login, register, loginWithGoogle, loginAsGuest } = useAuth();
@@ -13,6 +19,29 @@ export function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isGuestLoading, setIsGuestLoading] = useState(false);
+
+  // Initialize Google Identity Services if client ID is configured
+  useEffect(() => {
+    try {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: (window as any).GOOGLE_CLIENT_ID || "100234567890-example.apps.googleusercontent.com",
+          callback: async (response: any) => {
+            if (response.credential) {
+              setIsGoogleLoading(true);
+              try {
+                await loginWithGoogle({ credential: response.credential });
+              } catch (err: any) {
+                setError(err?.message || "Google verification failed.");
+              } finally {
+                setIsGoogleLoading(false);
+              }
+            }
+          },
+        });
+      }
+    } catch {}
+  }, [loginWithGoogle]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,19 +69,28 @@ export function LoginPage() {
   const handleGoogleSignIn = async () => {
     setError(null);
     setIsGoogleLoading(true);
-    try {
-      // In web app, we authenticate using Google's OAuth profile or credentials
-      const simulatedGoogleEmail = email || "counsel@company.com";
-      const simulatedGoogleName = fullName || "Enterprise Counsel";
-      await loginWithGoogle({
-        email: simulatedGoogleEmail,
-        name: simulatedGoogleName,
+
+    // If Google GSI OneTap / prompt is loaded in browser, trigger official prompt
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          // Fallback to OAuth popup or account prompt
+          window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${
+            (window as any).GOOGLE_CLIENT_ID || "100234567890-example.apps.googleusercontent.com"
+          }&redirect_uri=${encodeURIComponent(
+            window.location.origin + "/api/auth/google/callback"
+          )}&response_type=token%20id_token&scope=openid%20email%20profile&nonce=cas_${Date.now()}`;
+        }
       });
-    } catch (err: any) {
-      setError(err?.message || "Google sign-in failed.");
-    } finally {
-      setIsGoogleLoading(false);
+      return;
     }
+
+    // Direct OAuth redirect if script is blocked by extension/sandbox
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${
+      (window as any).GOOGLE_CLIENT_ID || "100234567890-example.apps.googleusercontent.com"
+    }&redirect_uri=${encodeURIComponent(
+      window.location.origin + "/api/auth/google/callback"
+    )}&response_type=token%20id_token&scope=openid%20email%20profile&nonce=cas_${Date.now()}`;
   };
 
   const handleGuest = async () => {
