@@ -6,6 +6,7 @@ import {
   apiLogin,
   apiRegister,
   apiGuestLogin,
+  apiGoogleLogin,
   apiLogout,
   fetchCurrentUser,
   refreshAccessToken,
@@ -18,7 +19,8 @@ interface AuthContextType {
   isGuest: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName?: string) => Promise<void>;
+  register: (email: string, password: string, fullName?: string) => Promise<{ requires_verification?: boolean }>;
+  loginWithGoogle: (payload: { credential?: string; email?: string; name?: string }) => Promise<void>;
   loginAsGuest: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -63,6 +65,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (email: string, password: string, fullName?: string) => {
     const res = await apiRegister(email, password, fullName);
     setUser(res.user);
+    return { requires_verification: res.requires_verification };
+  };
+
+  const loginWithGoogle = async (payload: { credential?: string; email?: string; name?: string }) => {
+    const res = await apiGoogleLogin(payload);
+    setUser(res.user);
   };
 
   const loginAsGuest = async () => {
@@ -89,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         register,
+        loginWithGoogle,
         loginAsGuest,
         logout,
       }}

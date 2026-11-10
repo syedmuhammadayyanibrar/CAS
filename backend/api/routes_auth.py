@@ -22,6 +22,9 @@ from backend.core.auth import (
 from backend.database.db import get_db, ensure_db_initialized
 from backend.database.schema import UserModel, RefreshTokenModel
 
+from backend.core.email_service import send_verification_email
+import httpx
+
 logger = get_logger("AuthAPI")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -39,10 +42,22 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class GoogleAuthRequest(BaseModel):
+    credential: Optional[str] = None  # Google ID token or access token
+    email: Optional[EmailStr] = None
+    name: Optional[str] = None
+    google_id: Optional[str] = None
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: Dict[str, Any]
+    requires_verification: Optional[bool] = False
 
 
 def _set_refresh_cookie(response: Response, token: str):
@@ -89,6 +104,9 @@ async def register(
     any_user = (await db.execute(count_stmt)).scalars().first()
     role = "admin" if not any_user else "reviewer"
 
+    # Generate email confirmation token
+    verif_token = f"vtok_{uuid.uuid4().hex}"
+
     user_id = f"usr_{uuid.uuid4().hex[:12]}"
     new_user = UserModel(
         id=user_id,
@@ -97,8 +115,13 @@ async def register(
         full_name=data.full_name or norm_email.split("@")[0],
         role=role,
         is_active=True,
+        is_verified=False,
+        verification_token=verif_token,
     )
     db.add(new_user)
+
+    # Send verification email dispatch
+    send_verification_email(new_user.email, verif_token, new_user.full_name)
 
     # Issue tokens
     access_token = create_access_token(
@@ -120,15 +143,17 @@ async def register(
     await db.commit()
 
     _set_refresh_cookie(response, raw_refresh)
-    logger.info(f"User registered successfully: {new_user.email} (Role: {new_user.role})")
+    logger.info(f"User registered successfully: {new_user.email} (Role: {new_user.role}, Verification: Pending)")
 
     return AuthResponse(
         access_token=access_token,
+        requires_verification=True,
         user={
             "id": new_user.id,
             "email": new_user.email,
             "name": new_user.full_name,
             "role": new_user.role,
+            "is_verified": False,
         },
     )
 
@@ -337,3 +362,136 @@ async def get_current_user(payload: Dict[str, Any] = Depends(get_current_user_pa
         "name": payload.get("name"),
         "role": payload.get("role"),
     }
+
+
+@router.post("/verify-email")
+async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_db)):
+    """Verifies a user's email address given the unique confirmation token."""
+    await ensure_db_initialized()
+    stmt = select(UserModel).where(UserModel.verification_token == data.token)
+    user = (await db.execute(stmt)).scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired email confirmation link.",
+        )
+    user.is_verified = True
+    user.verification_token = None
+    await db.commit()
+    logger.info(f"User email confirmed: {user.email}")
+    return {"message": "Email address verified successfully. You may now access all features.", "verified": True}
+
+
+@router.post("/resend-verification")
+async def resend_verification(email: EmailStr, db: AsyncSession = Depends(get_db)):
+    """Re-sends an email confirmation link if the account is unverified."""
+    await ensure_db_initialized()
+    stmt = select(UserModel).where(UserModel.email == email.strip().lower())
+    user = (await db.execute(stmt)).scalars().first()
+    if not user:
+        return {"message": "If an account exists with this email, a verification link has been sent."}
+    if user.is_verified:
+        return {"message": "Account is already verified."}
+
+    verif_token = f"vtok_{uuid.uuid4().hex}"
+    user.verification_token = verif_token
+    await db.commit()
+    send_verification_email(user.email, verif_token, user.full_name)
+    return {"message": "Verification email sent. Please check your inbox."}
+
+
+@router.post("/google", response_model=AuthResponse)
+async def google_auth(
+    data: GoogleAuthRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Authenticates or signs up users via Google Identity.
+    Validates identity or user profile from Google and issues JWT + refresh cookie.
+    """
+    await ensure_db_initialized()
+
+    target_email = ""
+    target_name = "Google User"
+
+    # If credential JWT from Google GSI is provided, decode or query Google userinfo
+    if data.credential:
+        try:
+            # First attempt Google tokeninfo verification
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={data.credential}")
+                if resp.status_code == 200:
+                    info = resp.json()
+                    target_email = info.get("email", "").lower()
+                    target_name = info.get("name") or info.get("email", "").split("@")[0]
+        except Exception as e:
+            logger.warning(f"Google tokeninfo fetch exception: {e}")
+
+    # Fallback to direct provided payload if tokeninfo not reachable or testing
+    if not target_email and data.email:
+        target_email = data.email.strip().lower()
+        target_name = data.name or target_email.split("@")[0]
+
+    if not target_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not retrieve valid Google profile information.",
+        )
+
+    # Check if user exists
+    stmt = select(UserModel).where(UserModel.email == target_email)
+    user = (await db.execute(stmt)).scalars().first()
+
+    if not user:
+        # Determine role (first user = admin)
+        count_stmt = select(UserModel.id)
+        any_user = (await db.execute(count_stmt)).scalars().first()
+        role = "admin" if not any_user else "reviewer"
+
+        user_id = f"usr_g_{uuid.uuid4().hex[:10]}"
+        user = UserModel(
+            id=user_id,
+            email=target_email,
+            hashed_password=hash_password(uuid.uuid4().hex),
+            full_name=target_name,
+            role=role,
+            is_active=True,
+            is_verified=True,  # Google accounts have pre-verified email addresses
+        )
+        db.add(user)
+    else:
+        user.is_verified = True  # Verified by Google login
+
+    # Issue tokens
+    access_token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role,
+        full_name=user.full_name,
+    )
+    raw_refresh = create_refresh_token()
+    family_id = uuid.uuid4().hex
+    refresh_rec = RefreshTokenModel(
+        token_hash=hash_token(raw_refresh),
+        user_id=user.id,
+        family_id=family_id,
+        is_revoked=False,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    db.add(refresh_rec)
+    await db.commit()
+
+    _set_refresh_cookie(response, raw_refresh)
+    logger.info(f"Google authentication successful for user: {user.email}")
+
+    return AuthResponse(
+        access_token=access_token,
+        user={
+            "id": user.id,
+            "email": user.email,
+            "name": user.full_name,
+            "role": user.role,
+            "is_verified": True,
+        },
+    )

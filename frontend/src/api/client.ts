@@ -247,12 +247,14 @@ export interface AuthUser {
   email: string;
   name?: string;
   role: "admin" | "reviewer" | "guest" | string;
+  is_verified?: boolean;
 }
 
 export interface AuthResponse {
   access_token: string;
   token_type: string;
   user: AuthUser;
+  requires_verification?: boolean;
 }
 
 let inMemoryAccessToken: string | null = null;
@@ -390,6 +392,50 @@ export async function apiLogout(): Promise<void> {
   } finally {
     setStoredAccessToken(null);
   }
+}
+
+export async function apiVerifyEmail(token: string): Promise<{ message: string; verified: boolean }> {
+  let res = await fetch(`${API_BASE}/api/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    res = await fetch(`${API_BASE}/auth/verify-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Email verification failed.");
+  }
+  return res.json();
+}
+
+export async function apiGoogleLogin(credentialPayload: { credential?: string; email?: string; name?: string }): Promise<AuthResponse> {
+  let res = await fetch(`${API_BASE}/api/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(credentialPayload),
+  });
+  if (!res.ok) {
+    res = await fetch(`${API_BASE}/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(credentialPayload),
+    });
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Google sign-in failed.");
+  }
+  const data: AuthResponse = await res.json();
+  setStoredAccessToken(data.access_token);
+  return data;
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser> {

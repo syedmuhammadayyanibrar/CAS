@@ -208,6 +208,8 @@ class UserModel(Base):
     full_name = Column(String(255), nullable=True)
     role = Column(String(50), nullable=False, default="reviewer")  # admin, reviewer, guest
     is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    verification_token = Column(String(255), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
