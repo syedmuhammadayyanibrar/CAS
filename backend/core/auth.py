@@ -219,12 +219,22 @@ _ADMIN_ONLY_RULES = [
     ("POST", re.compile(r"^/evaluation/run")),
 ]
 
-# What a guest may do: read the demo-safe areas and drive the demo sandbox.
-# Everything else (real contracts, audit trail, approvals, memory, automations,
-# any analysis that spends LLM budget) requires an account.
-_GUEST_READ_PREFIXES = ("/dashboard", "/evaluation", "/demo", "/contracts/CTR-DEMO")
+# What a guest may do: explore dashboard, evaluation, demo, upload/inspect/analyze
+# contracts, while governance actions (signing, HITL review resolution, audit logs,
+# organizational memory, outbound automations, and benchmark runs) require an account.
+_GUEST_READ_PREFIXES = (
+    "/dashboard",
+    "/evaluation",
+    "/demo",
+    "/contracts",
+    "/automations/google-drive/files",
+)
 _GUEST_WRITE_RULES = [
     ("POST", re.compile(r"^/demo/")),
+    ("POST", re.compile(r"^/contracts/?$")),
+    ("POST", re.compile(r"^/contracts/(upload-document|extract-text)$")),
+    ("POST", re.compile(r"^/contracts/[^/]+/(analyze|ask)$")),
+    ("POST", re.compile(r"^/automations/google-drive/import$")),
 ]
 
 

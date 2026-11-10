@@ -19,7 +19,7 @@ interface SidebarProps {
   pendingApprovalsCount?: number;
 }
 
-const GUEST_ALLOWED_PATHS = ["/", "/demo", "/evaluation"];
+const GUEST_ALLOWED_PATHS = ["/", "/contracts", "/demo", "/evaluation"];
 
 export function Sidebar({
   isOpen,

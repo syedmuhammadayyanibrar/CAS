@@ -25,16 +25,19 @@ function AppLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !isGuest) {
       fetchReviews("PENDING")
         .then((data) => setPendingReviewsCount(data.length))
         .catch(() => {});
     }
-  }, [location.pathname, isAuthenticated]);
+  }, [location.pathname, isAuthenticated, isGuest]);
 
-  // Guests may only use the dashboard, demo and evaluation areas (enforced by the API too)
+  // Guests may use the dashboard, contracts (upload & workspace), demo and evaluation areas
   useEffect(() => {
-    if (isGuest && !(["/", "/demo", "/evaluation"].includes(location.pathname))) {
+    const allowedGuestRoute =
+      ["/", "/contracts", "/demo", "/evaluation"].includes(location.pathname) ||
+      location.pathname.startsWith("/contracts/");
+    if (isGuest && !allowedGuestRoute) {
       navigate("/", { replace: true });
     }
   }, [isGuest, location.pathname, navigate]);

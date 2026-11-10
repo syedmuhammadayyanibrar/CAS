@@ -117,18 +117,25 @@ def test_access_token_claims_and_lifetime():
     ("POST", "/evaluation/run", ROLE_ADMIN, True),
     ("POST", "/api/evaluation/run", ROLE_REVIEWER, False),
     ("GET", "/evaluation/summary", ROLE_REVIEWER, True),
-    # guest: read-only on demo-safe areas, sandbox writes on /demo only
+    # guest: allowed dashboard, evaluation, demo, and contract upload/inspection/analysis
     ("GET", "/dashboard/summary", ROLE_GUEST, True),
     ("GET", "/evaluation/summary", ROLE_GUEST, True),
     ("GET", "/demo/state", ROLE_GUEST, True),
     ("POST", "/demo/run-step", ROLE_GUEST, True),
     ("POST", "/demo/reset", ROLE_GUEST, True),
-    ("GET", "/contracts", ROLE_GUEST, False),
-    ("GET", "/contracts/CTR-REAL-1", ROLE_GUEST, False),
+    ("GET", "/contracts", ROLE_GUEST, True),
+    ("GET", "/contracts/CTR-REAL-1", ROLE_GUEST, True),
     ("GET", "/contracts/CTR-DEMO-2026-SAAS", ROLE_GUEST, True),
-    ("POST", "/contracts", ROLE_GUEST, False),
-    ("POST", "/contracts/CTR-1/analyze", ROLE_GUEST, False),
-    ("POST", "/contracts/CTR-1/ask", ROLE_GUEST, False),
+    ("GET", "/automations/google-drive/files", ROLE_GUEST, True),
+    ("POST", "/contracts", ROLE_GUEST, True),
+    ("POST", "/contracts/upload-document", ROLE_GUEST, True),
+    ("POST", "/contracts/extract-text", ROLE_GUEST, True),
+    ("POST", "/automations/google-drive/import", ROLE_GUEST, True),
+    ("POST", "/contracts/CTR-1/analyze", ROLE_GUEST, True),
+    ("POST", "/contracts/CTR-1/ask", ROLE_GUEST, True),
+    # guest: blocked from signing, HITL reviews, audit, memory, automations execute, benchmark runs
+    ("POST", "/contracts/CTR-1/sign", ROLE_GUEST, False),
+    ("POST", "/contracts/CTR-1/review", ROLE_GUEST, False),
     ("POST", "/reviews/1/resolve", ROLE_GUEST, False),
     ("POST", "/evaluation/run", ROLE_GUEST, False),
     ("POST", "/mesh/analyze", ROLE_GUEST, False),
@@ -146,13 +153,20 @@ def test_rbac_policy(method, path, role, expected):
 
 
 @pytest.mark.asyncio
-async def test_guest_is_blocked_from_real_data_and_mutations_over_http():
+async def test_guest_can_upload_contracts_but_is_blocked_from_governance_over_http():
     guest = {"Authorization": f"Bearer {create_guest_token()}"}
     async with client() as ac:
         assert (await ac.get("/dashboard/summary", headers=guest)).status_code == 200
+        assert (await ac.get("/contracts", headers=guest)).status_code == 200
+        upload_res = await ac.post(
+            "/contracts",
+            headers=guest,
+            json={"title": "Guest MSA", "content": "Section 1. Confidentiality obligations apply."},
+        )
+        assert upload_res.status_code == 201
         for method, path in [
-            ("GET", "/contracts"), ("GET", "/audit"), ("GET", "/memory"),
-            ("POST", "/contracts"), ("POST", "/evaluation/run"), ("POST", "/mesh/analyze"),
+            ("GET", "/audit"), ("GET", "/memory"), ("GET", "/reviews"),
+            ("POST", "/contracts/CTR-1/sign"), ("POST", "/evaluation/run"), ("POST", "/mesh/analyze"),
         ]:
             res = await ac.request(method, path, headers=guest, json={} if method == "POST" else None)
             assert res.status_code == 403, f"{method} {path}"

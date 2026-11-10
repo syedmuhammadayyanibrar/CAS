@@ -47,7 +47,7 @@ export function Header({
             <h1 className="text-sm font-semibold text-[#111827] truncate">{title}</h1>
             {isGuest && (
               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                Guest Mode (Read-Only)
+                Guest Mode
               </span>
             )}
           </div>
@@ -65,13 +65,8 @@ export function Header({
         {onNewContract && (
           <button
             onClick={onNewContract}
-            disabled={isGuest}
-            title={isGuest ? "Guest accounts cannot upload contracts" : "Upload new contract"}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium shadow-xs transition-colors cursor-pointer ${
-              isGuest
-                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
+            title="Upload new contract"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium shadow-xs transition-colors cursor-pointer bg-blue-600 hover:bg-blue-700 text-white"
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Upload Contract</span>
