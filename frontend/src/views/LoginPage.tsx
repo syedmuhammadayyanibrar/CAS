@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Shield, Sparkles, User, Lock, Mail, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
+import { Shield, User, Lock, Mail, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export function LoginPage() {
@@ -42,32 +42,32 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-[#0F172A] via-[#1E293B] to-[#0A0F1D] flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-white">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-slate-800">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-linear-to-tr from-blue-600 to-indigo-500 shadow-xl shadow-blue-500/25 mb-4">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 shadow-lg shadow-blue-600/20 mb-4">
           <Shield className="w-7 h-7 text-white" />
         </div>
-        <h2 className="text-2xl font-bold tracking-tight text-white">
+        <h2 className="text-2xl font-bold tracking-tight text-slate-900">
           Contract Agentic Society (CAS)
         </h2>
-        <p className="mt-2 text-xs text-slate-400">
+        <p className="mt-1.5 text-xs text-slate-500 font-medium">
           Federated Multi-Agent Legal & Negotiation Mesh Platform
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
-        <div className="bg-[#1E293B]/80 backdrop-blur-xl border border-slate-700/60 rounded-2xl shadow-2xl p-6 sm:p-8">
+        <div className="bg-white border border-slate-200/90 rounded-2xl shadow-xl shadow-slate-200/50 p-6 sm:p-8">
           {/* Tabs */}
-          <div className="flex border-b border-slate-700/80 mb-6">
+          <div className="flex border-b border-slate-200 mb-6">
             <button
               onClick={() => {
                 setTab("login");
                 setError(null);
               }}
-              className={`flex-1 pb-3 text-xs font-semibold tracking-wider uppercase transition-colors border-b-2 ${
+              className={`flex-1 pb-3 text-xs font-semibold tracking-wider uppercase transition-colors border-b-2 cursor-pointer ${
                 tab === "login"
-                  ? "border-blue-500 text-blue-400"
-                  : "border-transparent text-slate-400 hover:text-slate-200"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-400 hover:text-slate-600"
               }`}
             >
               Sign In
@@ -77,10 +77,10 @@ export function LoginPage() {
                 setTab("register");
                 setError(null);
               }}
-              className={`flex-1 pb-3 text-xs font-semibold tracking-wider uppercase transition-colors border-b-2 ${
+              className={`flex-1 pb-3 text-xs font-semibold tracking-wider uppercase transition-colors border-b-2 cursor-pointer ${
                 tab === "register"
-                  ? "border-blue-500 text-blue-400"
-                  : "border-transparent text-slate-400 hover:text-slate-200"
+                  ? "border-blue-600 text-blue-600"
+                  : "border-transparent text-slate-400 hover:text-slate-600"
               }`}
             >
               Register
@@ -88,8 +88,8 @@ export function LoginPage() {
           </div>
 
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div className="mb-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
               <span>{error}</span>
             </div>
           )}
@@ -97,7 +97,7 @@ export function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {tab === "register" && (
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
+                <label className="block text-xs font-medium text-slate-700 mb-1">
                   Full Name
                 </label>
                 <div className="relative">
@@ -109,14 +109,14 @@ export function LoginPage() {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="General Counsel"
-                    className="block w-full pl-9 pr-3 py-2 text-xs bg-slate-900/60 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                    className="block w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white focus:border-transparent transition"
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 mb-1">
                 Corporate Email
               </label>
               <div className="relative">
@@ -129,13 +129,13 @@ export function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="lawyer@enterprise.com"
-                  className="block w-full pl-9 pr-3 py-2 text-xs bg-slate-900/60 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="block w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white focus:border-transparent transition"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
+              <label className="block text-xs font-medium text-slate-700 mb-1">
                 Password
               </label>
               <div className="relative">
@@ -148,7 +148,7 @@ export function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
-                  className="block w-full pl-9 pr-3 py-2 text-xs bg-slate-900/60 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="block w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-600 focus:bg-white focus:border-transparent transition"
                 />
               </div>
             </div>
@@ -156,7 +156,7 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-blue-500/25 transition disabled:opacity-50 cursor-pointer"
+              className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-md shadow-blue-600/20 transition disabled:opacity-50 cursor-pointer"
             >
               {isSubmitting ? (
                 <span>Authenticating...</span>
@@ -177,29 +177,28 @@ export function LoginPage() {
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-700/70" />
+              <div className="w-full border-t border-slate-200" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-[#1E293B] px-3 text-slate-400 text-[10px] tracking-wider font-semibold">
+              <span className="bg-white px-3 text-slate-400 text-[10px] tracking-wider font-semibold">
                 Or Continue Instantly
               </span>
             </div>
           </div>
 
-          {/* Guest Mode Button */}
+          {/* Guest Mode Button without emoji/sparkle */}
           <button
             type="button"
             onClick={handleGuest}
             disabled={isGuestLoading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 rounded-lg text-xs font-semibold text-slate-200 transition shadow-xs cursor-pointer group"
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200/80 border border-slate-300/80 rounded-lg text-xs font-semibold text-slate-700 transition shadow-2xs cursor-pointer"
           >
-            <Sparkles className="w-4 h-4 text-amber-400 group-hover:rotate-12 transition-transform" />
             <span>
               {isGuestLoading ? "Initializing Guest..." : "Continue as Guest (Read-Only Demo)"}
             </span>
           </button>
 
-          <p className="mt-4 text-[10px] text-center text-slate-400">
+          <p className="mt-4 text-[11px] text-center text-slate-400 leading-relaxed">
             Guest mode provides read-only exploration of the live dashboard, 15-stage multi-agent demo, and benchmark suite without saving credentials.
           </p>
         </div>
