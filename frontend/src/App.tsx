@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { AuthProvider, useAuth } from "./context/AuthContext";
+import { LoginPage } from "./views/LoginPage";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { UploadModal } from "./components/UploadModal";
@@ -15,6 +17,7 @@ import { EvaluationCenterView } from "./views/EvaluationCenterView";
 import { fetchReviews } from "./api/client";
 
 function AppLayout() {
+  const { isAuthenticated, isLoading } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
@@ -22,15 +25,32 @@ function AppLayout() {
   const location = useLocation();
 
   useEffect(() => {
-    fetchReviews("PENDING")
-      .then((data) => setPendingReviewsCount(data.length))
-      .catch(() => {});
-  }, [location.pathname]);
+    if (isAuthenticated) {
+      fetchReviews("PENDING")
+        .then((data) => setPendingReviewsCount(data.length))
+        .catch(() => {});
+    }
+  }, [location.pathname, isAuthenticated]);
 
   // Automatically close sidebar when navigating to a new route
   useEffect(() => {
     setIsSidebarOpen(false);
   }, [location.pathname]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0F172A] flex items-center justify-center text-slate-400 text-xs">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          <span>Verifying credentials & session...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   const getHeaderInfo = (): { title: string; subtitle?: string } => {
     const path = location.pathname;
@@ -130,7 +150,9 @@ export default function App() {
   const basename = window.location.pathname.startsWith("/ui") ? "/ui" : "";
   return (
     <BrowserRouter basename={basename}>
-      <AppLayout />
+      <AuthProvider>
+        <AppLayout />
+      </AuthProvider>
     </BrowserRouter>
   );
 }

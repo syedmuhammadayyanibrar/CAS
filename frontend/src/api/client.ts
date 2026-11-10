@@ -242,10 +242,140 @@ export interface CASMemoryItem {
   created_at?: string;
 }
 
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+  role: "admin" | "reviewer" | "guest" | string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+let inMemoryAccessToken: string | null = null;
+
+export function getStoredAccessToken(): string | null {
+  return inMemoryAccessToken;
+}
+
+export function setStoredAccessToken(token: string | null) {
+  inMemoryAccessToken = token;
+}
+
 const API_BASE = "";
 
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers || {});
+  if (inMemoryAccessToken) {
+    headers.set("Authorization", `Bearer ${inMemoryAccessToken}`);
+  }
+  options.credentials = options.credentials || "include";
+  options.headers = headers;
+
+  let res = await fetch(url, options);
+
+  // If 401 Unauthorized, attempt a silent token refresh once
+  if (res.status === 401 && !url.includes("/auth/")) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      const retryHeaders = new Headers(options.headers || {});
+      retryHeaders.set("Authorization", `Bearer ${refreshed}`);
+      options.headers = retryHeaders;
+      res = await fetch(url, options);
+    }
+  }
+
+  return res;
+}
+
+export async function apiLogin(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Authentication failed.");
+  }
+  const data: AuthResponse = await res.json();
+  setStoredAccessToken(data.access_token);
+  return data;
+}
+
+export async function apiRegister(email: string, password: string, fullName?: string): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, password, full_name: fullName }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Registration failed.");
+  }
+  const data: AuthResponse = await res.json();
+  setStoredAccessToken(data.access_token);
+  return data;
+}
+
+export async function apiGuestLogin(): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/api/auth/guest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Guest sign-in failed.");
+  }
+  const data: AuthResponse = await res.json();
+  setStoredAccessToken(data.access_token);
+  return data;
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      setStoredAccessToken(null);
+      return null;
+    }
+    const data: AuthResponse = await res.json();
+    setStoredAccessToken(data.access_token);
+    return data.access_token;
+  } catch {
+    setStoredAccessToken(null);
+    return null;
+  }
+}
+
+export async function apiLogout(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } finally {
+    setStoredAccessToken(null);
+  }
+}
+
+export async function fetchCurrentUser(): Promise<AuthUser> {
+  const res = await authFetch(`${API_BASE}/api/auth/me`);
+  if (!res.ok) throw new Error("Unauthenticated");
+  return res.json();
+}
+
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
-  const res = await fetch(`${API_BASE}/dashboard/summary`);
+  const res = await authFetch(`${API_BASE}/dashboard/summary`);
   if (!res.ok) throw new Error("Failed to load dashboard summary");
   return res.json();
 }

@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from backend.core.config import settings
 from backend.core.logging import get_logger
@@ -9,6 +9,7 @@ from backend.events.bus import event_bus
 from backend.models.cas_message import CASMessage
 
 # Import routers
+from backend.api.routes_auth import router as auth_router
 from backend.api.routes_contracts import router as contracts_router
 from backend.api.routes_systems import router as systems_router
 from backend.api.routes_mesh import router as mesh_router
@@ -72,13 +73,38 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS if settings.ENVIRONMENT == "production" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
 # Include API route modules
+api_prefix = "/api"
+app.include_router(auth_router, prefix=api_prefix)
+app.include_router(contracts_router, prefix=api_prefix)
+app.include_router(systems_router, prefix=api_prefix)
+app.include_router(mesh_router, prefix=api_prefix)
+app.include_router(webhooks_router, prefix=api_prefix)
+app.include_router(audit_router, prefix=api_prefix)
+app.include_router(dashboard_router, prefix=api_prefix)
+app.include_router(automations_router, prefix=api_prefix)
+app.include_router(demo_router, prefix=api_prefix)
+app.include_router(evaluation_router, prefix=api_prefix)
+
+# Also include root-level routers for backwards compatibility with direct routes
+app.include_router(auth_router)
 app.include_router(contracts_router)
 app.include_router(systems_router)
 app.include_router(mesh_router)

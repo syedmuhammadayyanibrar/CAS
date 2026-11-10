@@ -65,5 +65,21 @@ class Settings(BaseSettings):
     MAX_CONTRACT_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
     AUDIT_LOG_RETENTION_DAYS: int = 90
 
+    # Authentication & JWT Settings
+    JWT_SECRET: str = "cas-super-secret-jwt-key-change-in-production-2026"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    JWT_GUEST_TOKEN_EXPIRE_MINUTES: int = 60
+    ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+    ]
+    COOKIE_SECURE: bool = False  # Set to True in production HTTPS
+    COOKIE_SAMESITE: str = "lax"
+    FASTN_WEBHOOK_SECRET: Optional[str] = None
+
 
 settings = Settings()

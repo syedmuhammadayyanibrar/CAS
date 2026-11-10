@@ -1,5 +1,6 @@
 import React from "react";
-import { Plus, Menu, X } from "lucide-react";
+import { Plus, Menu, X, LogOut, Shield, User, Sparkles } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 interface HeaderProps {
   title: string;
@@ -18,6 +19,8 @@ export function Header({
   isSidebarOpen,
   actions,
 }: HeaderProps) {
+  const { user, isGuest, logout } = useAuth();
+
   return (
     <header className="h-16 border-b border-[#E5E7EB] bg-white/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-20">
       <div className="flex items-center gap-3 min-w-0">
@@ -40,7 +43,15 @@ export function Header({
         )}
 
         <div className="min-w-0">
-          <h1 className="text-sm font-semibold text-[#111827] truncate">{title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-semibold text-[#111827] truncate">{title}</h1>
+            {isGuest && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                Guest Mode (Read-Only)
+              </span>
+            )}
+          </div>
           {subtitle && (
             <p className="text-[11px] text-[#6B7280] truncate hidden sm:block">
               {subtitle}
@@ -55,12 +66,39 @@ export function Header({
         {onNewContract && (
           <button
             onClick={onNewContract}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-medium shadow-xs transition-colors cursor-pointer"
+            disabled={isGuest}
+            title={isGuest ? "Guest accounts cannot upload contracts" : "Upload new contract"}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium shadow-xs transition-colors cursor-pointer ${
+              isGuest
+                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                : "bg-blue-600 hover:bg-blue-700 text-white"
+            }`}
           >
             <Plus className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Upload Contract</span>
             <span className="sm:hidden">Upload</span>
           </button>
+        )}
+
+        {/* User Pill / Logout */}
+        {user && (
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+            <div className="hidden md:flex flex-col text-right">
+              <span className="text-xs font-medium text-slate-800 leading-tight">
+                {user.name || user.email}
+              </span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                {user.role}
+              </span>
+            </div>
+            <button
+              onClick={logout}
+              title="Sign Out"
+              className="p-1.5 rounded-md text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         )}
       </div>
     </header>
