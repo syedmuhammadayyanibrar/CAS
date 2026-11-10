@@ -292,12 +292,20 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
 }
 
 export async function apiLogin(email: string, password: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
+  let res = await fetch(`${API_BASE}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ email, password }),
   });
+  if (!res.ok) {
+    res = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password }),
+    });
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Authentication failed.");
@@ -308,12 +316,20 @@ export async function apiLogin(email: string, password: string): Promise<AuthRes
 }
 
 export async function apiRegister(email: string, password: string, fullName?: string): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/register`, {
+  let res = await fetch(`${API_BASE}/api/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ email, password, full_name: fullName }),
   });
+  if (!res.ok) {
+    res = await fetch(`${API_BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, password, full_name: fullName }),
+    });
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Registration failed.");
@@ -324,11 +340,19 @@ export async function apiRegister(email: string, password: string, fullName?: st
 }
 
 export async function apiGuestLogin(): Promise<AuthResponse> {
-  const res = await fetch(`${API_BASE}/api/auth/guest`, {
+  let res = await fetch(`${API_BASE}/api/auth/guest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
   });
+  if (!res.ok) {
+    // Fallback in case endpoint is mounted at /auth/guest without /api
+    res = await fetch(`${API_BASE}/auth/guest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+    });
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Guest sign-in failed.");
@@ -369,7 +393,10 @@ export async function apiLogout(): Promise<void> {
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser> {
-  const res = await authFetch(`${API_BASE}/api/auth/me`);
+  let res = await authFetch(`${API_BASE}/api/auth/me`);
+  if (!res.ok) {
+    res = await authFetch(`${API_BASE}/auth/me`);
+  }
   if (!res.ok) throw new Error("Unauthenticated");
   return res.json();
 }

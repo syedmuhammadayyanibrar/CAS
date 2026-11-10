@@ -49,3 +49,7 @@ websockets==16.1.1
 python-multipart>=0.0.9
 aiosqlite>=0.20.0
 pypdf>=6.0.0
+
+PyJWT>=2.8.0
+argon2-cffi>=23.1.0
+email-validator>=2.1.0
