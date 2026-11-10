@@ -257,7 +257,13 @@ export interface AuthResponse {
   requires_verification?: boolean;
 }
 
-let inMemoryAccessToken: string | null = null;
+let inMemoryAccessToken: string | null = (function () {
+  try {
+    return sessionStorage.getItem("cas_access_token");
+  } catch {
+    return null;
+  }
+})();
 
 export function getStoredAccessToken(): string | null {
   return inMemoryAccessToken;
@@ -265,6 +271,13 @@ export function getStoredAccessToken(): string | null {
 
 export function setStoredAccessToken(token: string | null) {
   inMemoryAccessToken = token;
+  try {
+    if (token) {
+      sessionStorage.setItem("cas_access_token", token);
+    } else {
+      sessionStorage.removeItem("cas_access_token");
+    }
+  } catch {}
 }
 
 const API_BASE = "";
