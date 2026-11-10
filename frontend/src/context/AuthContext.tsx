@@ -10,6 +10,7 @@ import {
   apiLogout,
   fetchCurrentUser,
   refreshAccessToken,
+  UNAUTHORIZED_EVENT,
 } from "../api/client";
 
 interface AuthContextType {
@@ -20,7 +21,7 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<{ requires_verification?: boolean }>;
-  loginWithGoogle: (payload: { credential?: string; email?: string; name?: string }) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   loginAsGuest: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -30,6 +31,13 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // Any API call that ends in an unrecoverable 401 returns the user to the login screen
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, []);
 
   // Initialize session on mount
   useEffect(() => {
@@ -68,8 +76,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { requires_verification: res.requires_verification };
   };
 
-  const loginWithGoogle = async (payload: { credential?: string; email?: string; name?: string }) => {
-    const res = await apiGoogleLogin(payload);
+  const loginWithGoogle = async (credential: string) => {
+    const res = await apiGoogleLogin(credential);
     setUser(res.user);
   };
 

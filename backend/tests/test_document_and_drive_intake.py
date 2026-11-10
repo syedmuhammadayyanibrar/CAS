@@ -2,6 +2,7 @@ import pytest
 import io
 import zipfile
 from httpx import AsyncClient, ASGITransport
+from backend.tests.helpers import auth_headers
 from backend.main import app
 from backend.core.document_parser import DocumentParser
 
@@ -35,7 +36,7 @@ async def test_document_parser_docx_and_text():
 @pytest.mark.asyncio
 async def test_google_drive_api_endpoints():
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=auth_headers("admin")) as ac:
         # 1. List files
         r_files = await ac.get("/automations/google-drive/files")
         assert r_files.status_code == 200
@@ -59,7 +60,7 @@ async def test_google_drive_api_endpoints():
 @pytest.mark.asyncio
 async def test_upload_document_endpoint():
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=auth_headers("admin")) as ac:
         files = {"file": ("vendor_agreement.txt", b"VENDOR TERMS AND CONDITIONS\nPayment is due in 30 days.", "text/plain")}
         res = await ac.post("/contracts/upload-document", files=files)
         assert res.status_code == 200
@@ -79,7 +80,7 @@ async def test_upload_pdf_document_endpoint():
     pdf_bytes = buf.getvalue()
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=auth_headers("admin")) as ac:
         files = {"file": ("enterprise_agreement.pdf", pdf_bytes, "application/pdf")}
         res = await ac.post("/contracts/upload-document", files=files)
         assert res.status_code == 200

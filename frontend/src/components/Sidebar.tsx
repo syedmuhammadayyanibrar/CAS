@@ -11,6 +11,7 @@ import {
   BarChart2,
   X,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -18,12 +19,15 @@ interface SidebarProps {
   pendingApprovalsCount?: number;
 }
 
+const GUEST_ALLOWED_PATHS = ["/", "/demo", "/evaluation"];
+
 export function Sidebar({
   isOpen,
   onClose,
   pendingApprovalsCount = 0,
 }: SidebarProps) {
-  const navItems = [
+  const { isGuest } = useAuth();
+  const allNavItems = [
     { to: "/", label: "Dashboard", icon: LayoutDashboard },
     { to: "/contracts", label: "Contracts", icon: FileText },
     { to: "/approvals", label: "Approvals", icon: CheckSquare, badge: pendingApprovalsCount },
@@ -33,6 +37,9 @@ export function Sidebar({
     { to: "/demo", label: "Interactive Demo", icon: PlayCircle },
     { to: "/evaluation", label: "Evaluation", icon: BarChart2 },
   ];
+  const navItems = isGuest
+    ? allNavItems.filter((item) => GUEST_ALLOWED_PATHS.includes(item.to))
+    : allNavItems;
 
   // Close sidebar when Escape key is pressed
   useEffect(() => {

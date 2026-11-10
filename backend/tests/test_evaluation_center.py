@@ -1,5 +1,6 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
+from backend.tests.helpers import auth_headers
 from backend.main import app
 try:
     from backend.evaluation.metrics import (
@@ -164,7 +165,7 @@ async def test_routing_case_evaluation():
 @pytest.mark.asyncio
 async def test_evaluation_api_endpoints():
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="http://test", headers=auth_headers("admin")) as ac:
         # GET /evaluation/cases
         cases_res = await ac.get("/evaluation/cases")
         assert cases_res.status_code == 200

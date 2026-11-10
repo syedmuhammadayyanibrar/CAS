@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from backend.core.auth import authorize, verify_webhook_signature
 from backend.core.config import settings
 from backend.core.logging import get_logger
 from backend.database.db import init_db, AsyncSessionLocal
@@ -73,7 +74,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS if settings.ENVIRONMENT == "production" else ["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,33 +88,32 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
-# Include API route modules
-api_prefix = "/api"
-app.include_router(auth_router, prefix=api_prefix)
-app.include_router(contracts_router, prefix=api_prefix)
-app.include_router(systems_router, prefix=api_prefix)
-app.include_router(mesh_router, prefix=api_prefix)
-app.include_router(webhooks_router, prefix=api_prefix)
-app.include_router(audit_router, prefix=api_prefix)
-app.include_router(dashboard_router, prefix=api_prefix)
-app.include_router(automations_router, prefix=api_prefix)
-app.include_router(demo_router, prefix=api_prefix)
-app.include_router(evaluation_router, prefix=api_prefix)
+# Route mounting.
+# - Auth routes are public (they issue/refresh tokens).
+# - Every business router is protected by `authorize`: a valid JWT (401) plus
+#   the central RBAC policy in backend/core/auth.py (403).
+# - Fastn webhooks are machine-to-machine and use HMAC signature verification.
+# Routers are mounted both under /api and at the root for backwards compatibility.
+PROTECTED_ROUTERS = [
+    contracts_router,
+    systems_router,
+    mesh_router,
+    audit_router,
+    dashboard_router,
+    automations_router,
+    demo_router,
+    evaluation_router,
+]
 
-# Also include root-level routers for backwards compatibility with direct routes
-app.include_router(auth_router)
-app.include_router(contracts_router)
-app.include_router(systems_router)
-app.include_router(mesh_router)
-app.include_router(webhooks_router)
-app.include_router(audit_router)
-app.include_router(dashboard_router)
-app.include_router(automations_router)
-app.include_router(demo_router)
-app.include_router(evaluation_router)
+for _prefix in ("/api", ""):
+    app.include_router(auth_router, prefix=_prefix)
+    for _router in PROTECTED_ROUTERS:
+        app.include_router(_router, prefix=_prefix, dependencies=[Depends(authorize)])
+    app.include_router(webhooks_router, prefix=_prefix, dependencies=[Depends(verify_webhook_signature)])
 
 
 import os

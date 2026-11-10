@@ -257,13 +257,9 @@ export interface AuthResponse {
   requires_verification?: boolean;
 }
 
-let inMemoryAccessToken: string | null = (function () {
-  try {
-    return sessionStorage.getItem("cas_access_token");
-  } catch {
-    return null;
-  }
-})();
+// The access token lives in memory only (never in web storage) so an XSS bug cannot
+// read it. Sessions survive reloads through the HttpOnly refresh cookie.
+let inMemoryAccessToken: string | null = null;
 
 export function getStoredAccessToken(): string | null {
   return inMemoryAccessToken;
@@ -271,35 +267,67 @@ export function getStoredAccessToken(): string | null {
 
 export function setStoredAccessToken(token: string | null) {
   inMemoryAccessToken = token;
-  try {
-    if (token) {
-      sessionStorage.setItem("cas_access_token", token);
-    } else {
-      sessionStorage.removeItem("cas_access_token");
-    }
-  } catch {}
 }
 
 const API_BASE = "";
 
-async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(options.headers || {});
-  if (inMemoryAccessToken) {
-    headers.set("Authorization", `Bearer ${inMemoryAccessToken}`);
+export const UNAUTHORIZED_EVENT = "cas:unauthorized";
+
+// Single-flight refresh: refresh tokens rotate and a reused one revokes the whole
+// session family, so concurrent 401s must share ONE refresh request.
+let refreshInFlight: Promise<string | null> | null = null;
+
+export function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        let res = await fetch(`${API_BASE}/api/auth/refresh`, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (res.status === 404) {
+          res = await fetch(`${API_BASE}/auth/refresh`, {
+            method: "POST",
+            credentials: "include",
+          });
+        }
+        if (!res.ok) {
+          setStoredAccessToken(null);
+          return null;
+        }
+        const data: AuthResponse = await res.json();
+        setStoredAccessToken(data.access_token);
+        return data.access_token;
+      } catch {
+        setStoredAccessToken(null);
+        return null;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
   }
-  options.credentials = options.credentials || "include";
-  options.headers = headers;
+  return refreshInFlight;
+}
 
-  let res = await fetch(url, options);
+function withAuth(options: RequestInit, token: string | null): RequestInit {
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return { ...options, headers, credentials: options.credentials || "include" };
+}
 
-  // If 401 Unauthorized, attempt a silent token refresh once
-  if (res.status === 401 && !url.includes("/auth/")) {
+/** fetch() with the Bearer token attached and one transparent refresh+retry on 401. */
+async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  let res = await fetch(url, withAuth(options, inMemoryAccessToken));
+
+  if (res.status === 401) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      const retryHeaders = new Headers(options.headers || {});
-      retryHeaders.set("Authorization", `Bearer ${refreshed}`);
-      options.headers = retryHeaders;
-      res = await fetch(url, options);
+      res = await fetch(url, withAuth(options, refreshed));
+    }
+    if (res.status === 401) {
+      // Session is gone: let the app return to the login screen.
+      setStoredAccessToken(null);
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
     }
   }
 
@@ -313,7 +341,7 @@ export async function apiLogin(email: string, password: string): Promise<AuthRes
     credentials: "include",
     body: JSON.stringify({ email, password }),
   });
-  if (!res.ok) {
+  if (res.status === 404) {
     res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -337,7 +365,7 @@ export async function apiRegister(email: string, password: string, fullName?: st
     credentials: "include",
     body: JSON.stringify({ email, password, full_name: fullName }),
   });
-  if (!res.ok) {
+  if (res.status === 404) {
     res = await fetch(`${API_BASE}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -360,7 +388,7 @@ export async function apiGuestLogin(): Promise<AuthResponse> {
     headers: { "Content-Type": "application/json" },
     credentials: "include",
   });
-  if (!res.ok) {
+  if (res.status === 404) {
     // Fallback in case endpoint is mounted at /auth/guest without /api
     res = await fetch(`${API_BASE}/auth/guest`, {
       method: "POST",
@@ -375,25 +403,6 @@ export async function apiGuestLogin(): Promise<AuthResponse> {
   const data: AuthResponse = await res.json();
   setStoredAccessToken(data.access_token);
   return data;
-}
-
-export async function refreshAccessToken(): Promise<string | null> {
-  try {
-    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (!res.ok) {
-      setStoredAccessToken(null);
-      return null;
-    }
-    const data: AuthResponse = await res.json();
-    setStoredAccessToken(data.access_token);
-    return data.access_token;
-  } catch {
-    setStoredAccessToken(null);
-    return null;
-  }
 }
 
 export async function apiLogout(): Promise<void> {
@@ -413,7 +422,7 @@ export async function apiVerifyEmail(token: string): Promise<{ message: string; 
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
   });
-  if (!res.ok) {
+  if (res.status === 404) {
     res = await fetch(`${API_BASE}/auth/verify-email`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -427,19 +436,19 @@ export async function apiVerifyEmail(token: string): Promise<{ message: string; 
   return res.json();
 }
 
-export async function apiGoogleLogin(credentialPayload: { credential?: string; email?: string; name?: string }): Promise<AuthResponse> {
+export async function apiGoogleLogin(credential: string): Promise<AuthResponse> {
   let res = await fetch(`${API_BASE}/api/auth/google`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify(credentialPayload),
+    body: JSON.stringify({ credential }),
   });
-  if (!res.ok) {
+  if (res.status === 404) {
     res = await fetch(`${API_BASE}/auth/google`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify(credentialPayload),
+      body: JSON.stringify({ credential }),
     });
   }
   if (!res.ok) {
@@ -453,7 +462,7 @@ export async function apiGoogleLogin(credentialPayload: { credential?: string; e
 
 export async function fetchCurrentUser(): Promise<AuthUser> {
   let res = await authFetch(`${API_BASE}/api/auth/me`);
-  if (!res.ok) {
+  if (res.status === 404) {
     res = await authFetch(`${API_BASE}/auth/me`);
   }
   if (!res.ok) throw new Error("Unauthenticated");
@@ -467,14 +476,14 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
 }
 
 export async function fetchContracts(): Promise<ContractSummary[]> {
-  const res = await fetch(`${API_BASE}/contracts`);
+  const res = await authFetch(`${API_BASE}/contracts`);
   if (!res.ok) throw new Error("Failed to fetch contracts");
   return res.json();
 }
 
 export async function fetchContractDetail(id: string): Promise<ContractDetail> {
   try {
-    const res = await fetch(`${API_BASE}/contracts/${id}`);
+    const res = await authFetch(`${API_BASE}/contracts/${id}`);
     if (res.ok) return await res.json();
   } catch {}
 
@@ -490,7 +499,7 @@ export async function fetchContractDetail(id: string): Promise<ContractDetail> {
 
 export async function fetchContractAnalysis(id: string): Promise<FullAnalysis> {
   try {
-    const res = await fetch(`${API_BASE}/contracts/${id}/analysis`);
+    const res = await authFetch(`${API_BASE}/contracts/${id}/analysis`);
     if (res.ok) return await res.json();
   } catch {}
 
@@ -526,7 +535,7 @@ export async function triggerMeshAnalysis(id: string, objective?: string, contra
     }
   }
 
-  const res = await fetch(`${API_BASE}/contracts/${id}/analyze`, {
+  const res = await authFetch(`${API_BASE}/contracts/${id}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -549,7 +558,7 @@ export async function triggerMeshAnalysis(id: string, objective?: string, contra
 }
 
 export async function uploadContract(title: string, content: string, metadata?: any): Promise<any> {
-  const res = await fetch(`${API_BASE}/contracts`, {
+  const res = await authFetch(`${API_BASE}/contracts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, content, metadata }),
@@ -593,7 +602,7 @@ export async function uploadContractDocument(file: File, createContract: boolean
   // 2. Try JSON base64 extraction via /contracts/extract-text (zero multipart dependency)
   if (base64Data) {
     try {
-      const jsonRes = await fetch(`${API_BASE}/contracts/extract-text`, {
+      const jsonRes = await authFetch(`${API_BASE}/contracts/extract-text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -614,7 +623,7 @@ export async function uploadContractDocument(file: File, createContract: boolean
   formData.append("file", file);
   formData.append("create_contract", String(createContract));
 
-  const res = await fetch(`${API_BASE}/contracts/upload-document`, {
+  const res = await authFetch(`${API_BASE}/contracts/upload-document`, {
     method: "POST",
     body: formData,
   });
@@ -626,7 +635,7 @@ export async function uploadContractDocument(file: File, createContract: boolean
 }
 
 export async function fetchGoogleDriveFiles(): Promise<GoogleDriveFile[]> {
-  const res = await fetch(`${API_BASE}/automations/google-drive/files`);
+  const res = await authFetch(`${API_BASE}/automations/google-drive/files`);
   if (!res.ok) throw new Error("Failed to list Google Drive files");
   return res.json();
 }
@@ -636,7 +645,7 @@ export async function importGoogleDriveDocument(
   customUrl?: string,
   autoCreateContract: boolean = false
 ): Promise<GoogleDriveImportResult> {
-  const res = await fetch(`${API_BASE}/automations/google-drive/import`, {
+  const res = await authFetch(`${API_BASE}/automations/google-drive/import`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -653,7 +662,7 @@ export async function importGoogleDriveDocument(
 }
 
 export async function signContract(id: string, effectiveDate?: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/contracts/${id}/sign?effective_date=${effectiveDate || "2026-10-01"}`, {
+  const res = await authFetch(`${API_BASE}/contracts/${id}/sign?effective_date=${effectiveDate || "2026-10-01"}`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(`Failed to sign contract ${id}`);
@@ -661,7 +670,7 @@ export async function signContract(id: string, effectiveDate?: string): Promise<
 }
 
 export async function askContractQuestion(id: string, question: string): Promise<{ answer: string; model: string }> {
-  const res = await fetch(`${API_BASE}/contracts/${id}/ask`, {
+  const res = await authFetch(`${API_BASE}/contracts/${id}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question }),
@@ -672,13 +681,13 @@ export async function askContractQuestion(id: string, question: string): Promise
 
 export async function fetchReviews(status?: string): Promise<HumanReview[]> {
   const url = status ? `${API_BASE}/reviews?status=${status}` : `${API_BASE}/reviews`;
-  const res = await fetch(url);
+  const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch reviews");
   return res.json();
 }
 
 export async function resolveReview(reviewId: string, decision: string, reviewerId: string, decisionNotes: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/reviews/${reviewId}/resolve`, {
+  const res = await authFetch(`${API_BASE}/reviews/${reviewId}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ decision, reviewer_id: reviewerId, decision_notes: decisionNotes }),
@@ -688,13 +697,13 @@ export async function resolveReview(reviewId: string, decision: string, reviewer
 }
 
 export async function fetchAutomations(): Promise<{ org_id: string; workflows: FastnWorkflow[] }> {
-  const res = await fetch(`${API_BASE}/automations`);
+  const res = await authFetch(`${API_BASE}/automations`);
   if (!res.ok) throw new Error("Failed to fetch automations");
   return res.json();
 }
 
 export async function executeAutomation(slug: string, payload?: any): Promise<any> {
-  const res = await fetch(`${API_BASE}/automations/${slug}/execute`, {
+  const res = await authFetch(`${API_BASE}/automations/${slug}/execute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ payload }),
@@ -706,7 +715,7 @@ export async function executeAutomation(slug: string, payload?: any): Promise<an
 export async function runStandaloneSociety(systemSlug: string, payload: any): Promise<any> {
   // Normalize slug to match route (e.g. "contract_intelligence" -> "contract-intelligence")
   const routeSlug = systemSlug.replace(/_/g, "-");
-  const res = await fetch(`${API_BASE}/systems/${routeSlug}/analyze`, {
+  const res = await authFetch(`${API_BASE}/systems/${routeSlug}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -729,7 +738,7 @@ export async function fetchFastnExecutions(params?: {
   if (params?.workflow_slug) q.append("workflow_slug", params.workflow_slug);
   if (params?.status) q.append("status", params.status);
   if (params?.direction) q.append("direction", params.direction);
-  const res = await fetch(`${API_BASE}/automations/executions?${q.toString()}`);
+  const res = await authFetch(`${API_BASE}/automations/executions?${q.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch Fastn executions");
   return res.json();
 }
@@ -739,13 +748,13 @@ export async function fetchMemories(tags?: string, type?: string): Promise<{ mem
   const params = new URLSearchParams();
   if (tags) params.append("tags", tags);
   if (type) params.append("memory_type", type);
-  const res = await fetch(`${API_BASE}/memory?${params.toString()}`);
+  const res = await authFetch(`${API_BASE}/memory?${params.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch memories");
   return res.json();
 }
 
 export async function resetDemo(): Promise<any> {
-  const res = await fetch(`${API_BASE}/demo/reset`, { method: "POST" });
+  const res = await authFetch(`${API_BASE}/demo/reset`, { method: "POST" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Reset failed` }));
     throw new Error(err.detail || `Failed to reset demo (status ${res.status})`);
@@ -754,7 +763,7 @@ export async function resetDemo(): Promise<any> {
 }
 
 export async function runDemoStep(step: number): Promise<any> {
-  const res = await fetch(`${API_BASE}/demo/run-step`, {
+  const res = await authFetch(`${API_BASE}/demo/run-step`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ step }),
@@ -768,7 +777,7 @@ export async function runDemoStep(step: number): Promise<any> {
 
 export async function fetchEvents(contractId?: string): Promise<any[]> {
   const url = contractId ? `${API_BASE}/events?contract_id=${contractId}` : `${API_BASE}/events`;
-  const res = await fetch(url);
+  const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch events");
   return res.json();
 }
@@ -842,13 +851,13 @@ export interface ActiveOperation {
 }
 
 export async function fetchContractExecution(contractId: string): Promise<ContractExecutionState> {
-  const res = await fetch(`${API_BASE}/contracts/${contractId}/execution`);
+  const res = await authFetch(`${API_BASE}/contracts/${contractId}/execution`);
   if (!res.ok) throw new Error(`Failed to fetch execution for ${contractId}`);
   return res.json();
 }
 
 export async function fetchActiveOperations(): Promise<ActiveOperation[]> {
-  const res = await fetch(`${API_BASE}/dashboard/active-operations`);
+  const res = await authFetch(`${API_BASE}/dashboard/active-operations`);
   if (!res.ok) throw new Error("Failed to fetch active operations");
   return res.json();
 }
@@ -858,27 +867,44 @@ export function subscribeContractExecution(
   onUpdate: (data: { event: any; execution: ContractExecutionState }) => void
 ): () => void {
   let isClosed = false;
-  let eventSource: EventSource | null = null;
+  const abort = new AbortController();
 
-  try {
-    eventSource = new EventSource(`${API_BASE}/contracts/${contractId}/execution-stream`);
-    eventSource.onmessage = (e) => {
-      if (isClosed) return;
-      try {
-        const parsed = JSON.parse(e.data);
-        onUpdate(parsed);
-      } catch (err) {
-        console.error("SSE parse error", err);
+  // Authenticated SSE over fetch (EventSource cannot send an Authorization header).
+  (async () => {
+    try {
+      const res = await authFetch(`${API_BASE}/contracts/${contractId}/execution-stream`, {
+        headers: { Accept: "text/event-stream" },
+        signal: abort.signal,
+      });
+      if (!res.ok || !res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (!isClosed) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary: number;
+        while ((boundary = buffer.indexOf("\n\n")) !== -1) {
+          const chunk = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const data = chunk
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trim())
+            .join("\n");
+          if (!data || isClosed) continue;
+          try {
+            onUpdate(JSON.parse(data));
+          } catch (err) {
+            console.error("SSE parse error", err);
+          }
+        }
       }
-    };
-    eventSource.onerror = () => {
-      if (eventSource) {
-        eventSource.close();
-      }
-    };
-  } catch (err) {
-    console.error("Failed to connect SSE, fallback to polling", err);
-  }
+    } catch (err) {
+      if (!isClosed) console.error("Failed to connect SSE, fallback to polling", err);
+    }
+  })();
 
   // Also do periodic poll as safe fallback
   const interval = setInterval(async () => {
@@ -896,7 +922,7 @@ export function subscribeContractExecution(
 
   return () => {
     isClosed = true;
-    if (eventSource) eventSource.close();
+    abort.abort();
     clearInterval(interval);
   };
 }
@@ -1021,20 +1047,20 @@ export interface EvaluationRunHistoryItem {
 
 export async function fetchEvaluationSummary(runId?: string): Promise<EvaluationSummary> {
   const url = runId ? `${API_BASE}/evaluation/summary?run_id=${encodeURIComponent(runId)}` : `${API_BASE}/evaluation/summary`;
-  const res = await fetch(url);
+  const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch evaluation summary");
   return res.json();
 }
 
 export async function fetchEvaluationCases(category?: string): Promise<EvaluationCaseItem[]> {
   const url = category && category !== "all" ? `${API_BASE}/evaluation/cases?category=${encodeURIComponent(category)}` : `${API_BASE}/evaluation/cases`;
-  const res = await fetch(url);
+  const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch evaluation cases");
   return res.json();
 }
 
 export async function fetchEvaluationCaseDetail(caseId: string): Promise<any> {
-  const res = await fetch(`${API_BASE}/evaluation/cases/${encodeURIComponent(caseId)}`);
+  const res = await authFetch(`${API_BASE}/evaluation/cases/${encodeURIComponent(caseId)}`);
   if (!res.ok) throw new Error(`Failed to fetch case ${caseId}`);
   return res.json();
 }
@@ -1045,7 +1071,7 @@ export async function runEvaluation(options?: {
   case_id?: string;
   async_execution?: boolean;
 }): Promise<{ summary: EvaluationSummary; results: EvaluationResultItem[] }> {
-  const res = await fetch(`${API_BASE}/evaluation/run`, {
+  const res = await authFetch(`${API_BASE}/evaluation/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1060,7 +1086,7 @@ export async function runEvaluation(options?: {
 }
 
 export async function runSingleEvaluationCase(caseId: string): Promise<EvaluationResultItem> {
-  const res = await fetch(`${API_BASE}/evaluation/run/${encodeURIComponent(caseId)}`, {
+  const res = await authFetch(`${API_BASE}/evaluation/run/${encodeURIComponent(caseId)}`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(`Failed to run evaluation for case ${caseId}`);
@@ -1076,7 +1102,7 @@ export async function fetchEvaluationResults(params?: {
   if (params?.run_id) q.append("run_id", params.run_id);
   if (params?.category && params.category !== "all") q.append("category", params.category);
   if (params?.status && params.status !== "all") q.append("status_filter", params.status);
-  const res = await fetch(`${API_BASE}/evaluation/results?${q.toString()}`);
+  const res = await authFetch(`${API_BASE}/evaluation/results?${q.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch evaluation results");
   return res.json();
 }
@@ -1087,13 +1113,13 @@ export async function fetchEvaluationFailures(runId?: string): Promise<{
   grouped_by_society: Record<string, any[]>;
 }> {
   const url = runId ? `${API_BASE}/evaluation/failures?run_id=${encodeURIComponent(runId)}` : `${API_BASE}/evaluation/failures`;
-  const res = await fetch(url);
+  const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch evaluation failures");
   return res.json();
 }
 
 export async function fetchEvaluationRuns(): Promise<EvaluationRunHistoryItem[]> {
-  const res = await fetch(`${API_BASE}/evaluation/runs`);
+  const res = await authFetch(`${API_BASE}/evaluation/runs`);
   if (!res.ok) throw new Error("Failed to fetch evaluation runs");
   return res.json();
 }
@@ -1105,7 +1131,7 @@ export async function fetchEvaluationRunDetail(runId: string): Promise<{
   metrics: EvaluationSummary;
   cases: EvaluationResultItem[];
 }> {
-  const res = await fetch(`${API_BASE}/evaluation/runs/${encodeURIComponent(runId)}`);
+  const res = await authFetch(`${API_BASE}/evaluation/runs/${encodeURIComponent(runId)}`);
   if (!res.ok) throw new Error(`Failed to fetch run ${runId}`);
   return res.json();
 }
@@ -1132,3 +1158,11 @@ export async function fetchEvaluationHistory(): Promise<{ runs: EvaluationHistor
   }
 }
 
+
+export async function fetchAuthConfig(): Promise<{ google_client_id: string | null }> {
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/config`);
+    if (res.ok) return res.json();
+  } catch {}
+  return { google_client_id: null };
+}

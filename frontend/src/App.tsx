@@ -17,7 +17,7 @@ import { EvaluationCenterView } from "./views/EvaluationCenterView";
 import { fetchReviews } from "./api/client";
 
 function AppLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isGuest } = useAuth();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [pendingReviewsCount, setPendingReviewsCount] = useState(0);
@@ -31,6 +31,13 @@ function AppLayout() {
         .catch(() => {});
     }
   }, [location.pathname, isAuthenticated]);
+
+  // Guests may only use the dashboard, demo and evaluation areas (enforced by the API too)
+  useEffect(() => {
+    if (isGuest && !(["/", "/demo", "/evaluation"].includes(location.pathname))) {
+      navigate("/", { replace: true });
+    }
+  }, [isGuest, location.pathname, navigate]);
 
   // Automatically close sidebar when navigating to a new route
   useEffect(() => {

@@ -68,8 +68,10 @@ class Settings(BaseSettings):
     # Authentication & JWT Settings
     JWT_SECRET: str = "cas-super-secret-jwt-key-change-in-production-2026"
     JWT_ALGORITHM: str = "HS256"
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_ISSUER: str = "cas-api"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ADMIN_EMAILS: str = ""  # Comma-separated emails that receive the admin role on signup
     JWT_GUEST_TOKEN_EXPIRE_MINUTES: int = 60
     ALLOWED_ORIGINS: list[str] = [
         "http://localhost:5173",
@@ -77,7 +79,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
     ]
-    COOKIE_SECURE: bool = False  # Set to True in production HTTPS
+    COOKIE_SECURE: bool = bool(os.getenv("VERCEL"))  # Secure cookies by default on HTTPS (Vercel)
     COOKIE_SAMESITE: str = "lax"
     FASTN_WEBHOOK_SECRET: Optional[str] = None
 

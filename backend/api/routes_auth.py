@@ -1,12 +1,16 @@
 import os
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from backend.core.config import settings
 from backend.core.logging import get_logger
@@ -18,12 +22,14 @@ from backend.core.auth import (
     create_guest_token,
     create_refresh_token,
     get_current_user_payload,
+    rate_limit,
+    client_ip,
+    resolve_signup_role,
 )
 from backend.database.db import get_db, ensure_db_initialized
 from backend.database.schema import UserModel, RefreshTokenModel
 
 from backend.core.email_service import send_verification_email
-import httpx
 
 logger = get_logger("AuthAPI")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -43,10 +49,7 @@ class LoginRequest(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
-    credential: Optional[str] = None  # Google ID token or access token
-    email: Optional[EmailStr] = None
-    name: Optional[str] = None
-    google_id: Optional[str] = None
+    credential: str = Field(..., min_length=20)  # Google-signed ID token (JWT)
 
 
 class VerifyEmailRequest(BaseModel):
@@ -83,10 +86,12 @@ def _clear_refresh_cookie(response: Response):
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     data: RegisterRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Registers a new user and returns access token + sets rotating refresh cookie."""
+    rate_limit(f"register:{client_ip(request)}", limit=5, window_seconds=3600)
     await ensure_db_initialized()
     norm_email = data.email.strip().lower()
 
@@ -99,10 +104,10 @@ async def register(
             detail="An account with this email already exists.",
         )
 
-    # First registered user is automatically admin, others are reviewers
+    # Admins come from ADMIN_EMAILS; "first user is admin" is local-dev only
     count_stmt = select(UserModel.id)
     any_user = (await db.execute(count_stmt)).scalars().first()
-    role = "admin" if not any_user else "reviewer"
+    role = resolve_signup_role(norm_email, bool(any_user))
 
     # Generate email confirmation token
     verif_token = f"vtok_{uuid.uuid4().hex}"
@@ -161,12 +166,16 @@ async def register(
 @router.post("/login", response_model=AuthResponse)
 async def login(
     data: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticates credentials, returns access token, sets rotating refresh cookie."""
-    await ensure_db_initialized()
     norm_email = data.email.strip().lower()
+    # Brute-force protection: per (IP, account) and per account across IPs
+    rate_limit(f"login:{client_ip(request)}:{norm_email}", limit=10, window_seconds=900)
+    rate_limit(f"login-acct:{norm_email}", limit=30, window_seconds=900)
+    await ensure_db_initialized()
 
     stmt = select(UserModel).where(UserModel.email == norm_email)
     user = (await db.execute(stmt)).scalars().first()
@@ -218,8 +227,9 @@ async def login(
 
 
 @router.post("/guest", response_model=AuthResponse)
-async def guest_login():
+async def guest_login(request: Request):
     """Issues an unauthenticated temporary guest session (read-only exploration)."""
+    rate_limit(f"guest:{client_ip(request)}", limit=30, window_seconds=3600)
     guest_token = create_guest_token()
     return AuthResponse(
         access_token=guest_token,
@@ -383,8 +393,10 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
 
 
 @router.post("/resend-verification")
-async def resend_verification(email: EmailStr, db: AsyncSession = Depends(get_db)):
+async def resend_verification(email: EmailStr, request: Request, db: AsyncSession = Depends(get_db)):
     """Re-sends an email confirmation link if the account is unverified."""
+    rate_limit(f"resend:{client_ip(request)}", limit=5, window_seconds=3600)
+    rate_limit(f"resend-acct:{email.strip().lower()}", limit=3, window_seconds=3600)
     await ensure_db_initialized()
     stmt = select(UserModel).where(UserModel.email == email.strip().lower())
     user = (await db.execute(stmt)).scalars().first()
@@ -400,68 +412,78 @@ async def resend_verification(email: EmailStr, db: AsyncSession = Depends(get_db
     return {"message": "Verification email sent. Please check your inbox."}
 
 
+@router.get("/config")
+async def auth_public_config():
+    """Public client configuration (the Google OAuth client ID is not a secret)."""
+    return {"google_client_id": settings.GOOGLE_CLIENT_ID}
+
+
 @router.post("/google", response_model=AuthResponse)
 async def google_auth(
     data: GoogleAuthRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Authenticates or signs up users via Google Identity.
-    Validates identity or user profile from Google and issues JWT + refresh cookie.
+    Signs in / signs up with a Google ID token. The token's signature, expiry,
+    issuer and audience (our GOOGLE_CLIENT_ID) are verified cryptographically;
+    nothing client-supplied other than the signed token is trusted.
     """
-    await ensure_db_initialized()
+    rate_limit(f"google:{client_ip(request)}", limit=20, window_seconds=900)
 
-    target_email = ""
-    target_name = "Google User"
-
-    # If credential JWT from Google GSI is provided, decode or query Google userinfo
-    if data.credential:
-        try:
-            # First attempt Google tokeninfo verification
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={data.credential}")
-                if resp.status_code == 200:
-                    info = resp.json()
-                    target_email = info.get("email", "").lower()
-                    target_name = info.get("name") or info.get("email", "").split("@")[0]
-        except Exception as e:
-            logger.warning(f"Google tokeninfo fetch exception: {e}")
-
-    # Fallback to direct provided payload if tokeninfo not reachable or testing
-    if not target_email and data.email:
-        target_email = data.email.strip().lower()
-        target_name = data.name or target_email.split("@")[0]
-
-    if not target_email:
+    if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not retrieve valid Google profile information.",
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Google sign-in is not configured on this server.",
         )
+
+    try:
+        info = await run_in_threadpool(
+            google_id_token.verify_oauth2_token,
+            data.credential,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google credential.",
+        )
+
+    target_email = (info.get("email") or "").strip().lower()
+    if not target_email or not info.get("email_verified"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google account email is not verified.",
+        )
+    target_name = info.get("name") or target_email.split("@")[0]
+
+    await ensure_db_initialized()
 
     # Check if user exists
     stmt = select(UserModel).where(UserModel.email == target_email)
     user = (await db.execute(stmt)).scalars().first()
 
     if not user:
-        # Determine role (first user = admin)
-        count_stmt = select(UserModel.id)
-        any_user = (await db.execute(count_stmt)).scalars().first()
-        role = "admin" if not any_user else "reviewer"
-
-        user_id = f"usr_g_{uuid.uuid4().hex[:10]}"
+        any_user = (await db.execute(select(UserModel.id))).scalars().first()
         user = UserModel(
-            id=user_id,
+            id=f"usr_g_{uuid.uuid4().hex[:10]}",
             email=target_email,
-            hashed_password=hash_password(uuid.uuid4().hex),
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
             full_name=target_name,
-            role=role,
+            role=resolve_signup_role(target_email, bool(any_user)),
             is_active=True,
-            is_verified=True,  # Google accounts have pre-verified email addresses
+            is_verified=True,  # Google verified this email address
         )
         db.add(user)
     else:
-        user.is_verified = True  # Verified by Google login
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is deactivated. Please contact support.",
+            )
+        user.is_verified = True
 
     # Issue tokens
     access_token = create_access_token(
