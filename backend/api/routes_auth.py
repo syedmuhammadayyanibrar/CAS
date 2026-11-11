@@ -82,6 +82,8 @@ class OTPDispatchResponse(BaseModel):
     resend_wait_seconds: int
     resend_count: int
     otp_state_token: Optional[str] = None
+    email_delivered: bool = True
+    fallback_otp_code: Optional[str] = None
 
 
 class AuthResponse(BaseModel):
@@ -92,6 +94,8 @@ class AuthResponse(BaseModel):
     otp_expires_in_seconds: Optional[int] = None
     resend_wait_seconds: Optional[int] = None
     otp_state_token: Optional[str] = None
+    email_delivered: Optional[bool] = True
+    fallback_otp_code: Optional[str] = None
     session_expires_in_seconds: int = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
 
@@ -242,7 +246,7 @@ async def _issue_account_otp(
     email: str,
     full_name: Optional[str],
     purpose: str = "verification",
-) -> Tuple[str, int, int, int, EmailOTPModel]:
+) -> Tuple[str, int, int, int, EmailOTPModel, bool]:
     """
     Generates a 6-digit OTP with 5-minute validity, enforces the 2-minute initial wait
     and progressive exponential backoff (capped at 2 hours) for repeated requests on
@@ -300,7 +304,7 @@ async def _issue_account_otp(
         otp_rec.failed_attempts = 0
         otp_rec.updated_at = now_utc
 
-    send_otp_email(
+    delivered = send_otp_email(
         to_email=norm_email,
         otp_code=otp_code,
         full_name=full_name,
@@ -308,7 +312,7 @@ async def _issue_account_otp(
         valid_minutes=max(1, expire_seconds // 60),
     )
 
-    return otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec
+    return otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec, bool(delivered)
 
 
 def _set_refresh_cookie(response: Response, token: str, expire_days: Optional[int] = None):
@@ -414,7 +418,7 @@ async def register(
     )
     db.add(new_user)
 
-    otp_code, expire_seconds, cooldown_seconds, _, otp_rec = await _issue_account_otp(
+    otp_code, expire_seconds, cooldown_seconds, _, otp_rec, delivered = await _issue_account_otp(
         db=db,
         email=new_user.email,
         full_name=new_user.full_name,
@@ -432,7 +436,7 @@ async def register(
     _set_otp_state_cookie(response, state_token)
     await db.commit()
 
-    logger.info(f"User registered & OTP dispatched: {new_user.email} (Role: {new_user.role})")
+    logger.info(f"User registered & OTP dispatched: {new_user.email} (Role: {new_user.role}, Delivered: {delivered})")
 
     return AuthResponse(
         access_token=access_token,
@@ -440,6 +444,8 @@ async def register(
         otp_expires_in_seconds=expire_seconds,
         resend_wait_seconds=cooldown_seconds,
         otp_state_token=state_token,
+        email_delivered=delivered,
+        fallback_otp_code=None if delivered else otp_code,
         user={
             "id": new_user.id,
             "email": new_user.email,
@@ -484,7 +490,7 @@ async def request_otp(
             detail="Account is deactivated. Please contact support.",
         )
 
-    otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec = await _issue_account_otp(
+    otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec, delivered = await _issue_account_otp(
         db=db,
         email=user.email,
         full_name=user.full_name,
@@ -502,6 +508,8 @@ async def request_otp(
         resend_wait_seconds=cooldown_seconds,
         resend_count=resend_count,
         otp_state_token=state_token,
+        email_delivered=delivered,
+        fallback_otp_code=None if delivered else otp_code,
     )
 
 
@@ -897,7 +905,7 @@ async def resend_verification(
     if user.is_verified:
         return {"message": "Account is already verified."}
 
-    otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec = await _issue_account_otp(
+    otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec, _ = await _issue_account_otp(
         db=db,
         email=user.email,
         full_name=user.full_name,

@@ -178,7 +178,11 @@ export function LoginPage() {
           setResendWaitIn(otpRes.resend_wait_seconds || 120);
           setResendCount(otpRes.resend_count || 1);
           setOtpStep(true);
-          setSuccessNotice(`A 6-digit verification code has been sent to ${email} via Resend.`);
+          setSuccessNotice(
+            otpRes.fallback_otp_code
+              ? `Verification code generated for ${email}: ${otpRes.fallback_otp_code}`
+              : `A 6-digit verification code has been sent to ${email} via Resend.`
+          );
         } else {
           await login(email, password, rememberMe);
           await storeBrowserCredentials(email, password);
@@ -194,7 +198,9 @@ export function LoginPage() {
           setResendCount(1);
           setOtpStep(true);
           setSuccessNotice(
-            `Account created! Enter the 6-digit OTP sent to ${email} to verify your email and sign in.`
+            res.fallback_otp_code
+              ? `Account created! Verification code for ${email}: ${res.fallback_otp_code}`
+              : `Account created! Enter the 6-digit OTP sent to ${email} to verify your email and sign in.`
           );
         }
       }

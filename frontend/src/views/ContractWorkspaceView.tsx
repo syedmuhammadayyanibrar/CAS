@@ -129,8 +129,15 @@ export function ContractWorkspaceView() {
   const handleSign = async () => {
     setSigning(true);
     try {
-      await signContract(contractId);
+      const signRes = await signContract(contractId, undefined, contract?.raw_text, contract?.title);
       await loadData();
+      setContract((prev) => (prev ? { ...prev, status: "SIGNED" } : prev));
+      if (signRes?.schedule) {
+        setAnalysis((prev) => ({
+          ...(prev || { contract_id: contractId }),
+          obligation_schedule: signRes.schedule,
+        }));
+      }
       setSuccessMsg("Contract signed and obligations registered.");
       setActiveTab("obligations");
     } catch (err: any) {
@@ -148,7 +155,7 @@ export function ContractWorkspaceView() {
     setQaLoading(true);
 
     try {
-      const res = await askContractQuestion(contractId, q);
+      const res = await askContractQuestion(contractId, q, contract?.raw_text, contract?.title);
       setQaHistory((prev) => [...prev, { q, a: res.answer, model: res.model }]);
     } catch (err: any) {
       setQaHistory((prev) => [

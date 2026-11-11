@@ -20,6 +20,8 @@ interface RegisterResult {
   requires_verification?: boolean;
   otp_expires_in_seconds?: number;
   resend_wait_seconds?: number;
+  email_delivered?: boolean;
+  fallback_otp_code?: string | null;
 }
 
 interface AuthContextType {
@@ -116,6 +118,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       requires_verification: res.requires_verification,
       otp_expires_in_seconds: res.otp_expires_in_seconds,
       resend_wait_seconds: res.resend_wait_seconds,
+      email_delivered: res.email_delivered,
+      fallback_otp_code: res.fallback_otp_code,
     };
   };
 

@@ -258,6 +258,8 @@ export interface AuthResponse {
   otp_expires_in_seconds?: number;
   resend_wait_seconds?: number;
   otp_state_token?: string;
+  email_delivered?: boolean;
+  fallback_otp_code?: string | null;
   session_expires_in_seconds?: number;
 }
 
@@ -268,6 +270,8 @@ export interface OTPDispatchResponse {
   resend_wait_seconds: number;
   resend_count: number;
   otp_state_token?: string;
+  email_delivered?: boolean;
+  fallback_otp_code?: string | null;
 }
 
 const ACCESS_TOKEN_STORAGE_KEY = "cas_access_token";
@@ -658,24 +662,37 @@ export async function fetchContractDetail(id: string): Promise<ContractDetail> {
 }
 
 export async function fetchContractAnalysis(id: string): Promise<FullAnalysis> {
-  try {
-    const res = await authFetch(`${API_BASE}/contracts/${id}/analysis`);
-    if (res.ok) return await res.json();
-  } catch {}
-
   const cached = localStorage.getItem(`cas_analysis_${id}`);
+  let parsedCache: any = null;
   if (cached) {
     try {
-      const parsed = JSON.parse(cached);
-      return {
-        contract_id: id,
-        graph: parsed.contract_graph || parsed.graph,
-        risk_report: parsed.risk_report,
-        compliance_report: parsed.compliance_report,
-        negotiation_strategy: parsed.negotiation_strategy,
-        dispute_assessment: parsed.dispute_assessment,
-      };
+      parsedCache = JSON.parse(cached);
     } catch {}
+  }
+
+  try {
+    const res = await authFetch(`${API_BASE}/contracts/${id}/analysis`);
+    if (res.ok) {
+      const remote = await res.json();
+      if (remote && (remote.graph || remote.risk_report || remote.obligation_schedule)) {
+        return {
+          ...remote,
+          obligation_schedule: remote.obligation_schedule || parsedCache?.obligation_schedule,
+        };
+      }
+    }
+  } catch {}
+
+  if (parsedCache) {
+    return {
+      contract_id: id,
+      graph: parsedCache.contract_graph || parsedCache.graph,
+      risk_report: parsedCache.risk_report,
+      compliance_report: parsedCache.compliance_report,
+      negotiation_strategy: parsedCache.negotiation_strategy,
+      obligation_schedule: parsedCache.obligation_schedule,
+      dispute_assessment: parsedCache.dispute_assessment,
+    };
   }
   throw new Error(`Failed to fetch analysis for ${id}`);
 }
@@ -821,21 +838,86 @@ export async function importGoogleDriveDocument(
   return res.json();
 }
 
-export async function signContract(id: string, effectiveDate?: string): Promise<any> {
-  const res = await authFetch(`${API_BASE}/contracts/${id}/sign?effective_date=${effectiveDate || "2026-10-01"}`, {
+export async function signContract(
+  id: string,
+  effectiveDate?: string,
+  contractText?: string,
+  title?: string
+): Promise<any> {
+  let text = contractText;
+  let t = title;
+  if (!text) {
+    const cached = localStorage.getItem(`cas_contract_${id}`);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        text = parsed.raw_text;
+        t = parsed.title;
+      } catch {}
+    }
+  }
+
+  const eff = effectiveDate || "2026-10-01";
+  const res = await authFetch(`${API_BASE}/contracts/${id}/sign?effective_date=${encodeURIComponent(eff)}`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      effective_date: eff,
+      contract_text: text,
+      title: t,
+    }),
   });
-  if (!res.ok) throw new Error(`Failed to sign contract ${id}`);
-  return res.json();
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to sign contract ${id} (HTTP ${res.status})`);
+  }
+  const data = await res.json();
+  try {
+    const cachedContract = localStorage.getItem(`cas_contract_${id}`);
+    if (cachedContract) {
+      const parsed = JSON.parse(cachedContract);
+      parsed.status = "SIGNED";
+      parsed.effective_date = eff;
+      localStorage.setItem(`cas_contract_${id}`, JSON.stringify(parsed));
+    }
+    if (data?.schedule) {
+      const cachedAnalysis = localStorage.getItem(`cas_analysis_${id}`);
+      const parsedAnalysis = cachedAnalysis ? JSON.parse(cachedAnalysis) : { contract_id: id };
+      parsedAnalysis.obligation_schedule = data.schedule;
+      localStorage.setItem(`cas_analysis_${id}`, JSON.stringify(parsedAnalysis));
+    }
+  } catch {}
+  return data;
 }
 
-export async function askContractQuestion(id: string, question: string): Promise<{ answer: string; model: string }> {
+export async function askContractQuestion(
+  id: string,
+  question: string,
+  contractText?: string,
+  title?: string
+): Promise<{ answer: string; model: string }> {
+  let text = contractText;
+  let t = title;
+  if (!text) {
+    const cached = localStorage.getItem(`cas_contract_${id}`);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        text = parsed.raw_text;
+        t = parsed.title;
+      } catch {}
+    }
+  }
+
   const res = await authFetch(`${API_BASE}/contracts/${id}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, contract_text: text, title: t }),
   });
-  if (!res.ok) throw new Error(`Failed to ask contract question`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to ask contract question`);
+  }
   return res.json();
 }
 

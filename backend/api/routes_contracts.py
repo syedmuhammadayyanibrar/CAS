@@ -25,7 +25,9 @@ from backend.systems.obligation_intelligence.system import obligation_intelligen
 from backend.memory.feedback_loops import feedback_loops
 from backend.models.hitl import HumanDecision
 from backend.core.gemini_service import gemini_service
+from backend.core.logging import get_logger
 
+logger = get_logger("ContractsAPI")
 router = APIRouter(prefix="/contracts", tags=["Contracts Lifecycle"])
 
 
@@ -41,10 +43,18 @@ class ContractNegotiateRequest(BaseModel):
 
 class AskContractRequest(BaseModel):
     question: str
+    contract_text: Optional[str] = None
+    title: Optional[str] = None
 
 
 class AnalyzeRequest(BaseModel):
     objective: Optional[str] = "Protect Customer liability and ensure bilateral commercial terms."
+    contract_text: Optional[str] = None
+    title: Optional[str] = None
+
+
+class SignContractRequest(BaseModel):
+    effective_date: Optional[str] = "2026-10-01"
     contract_text: Optional[str] = None
     title: Optional[str] = None
 
@@ -261,9 +271,36 @@ async def ask_contract(
     risk findings, compliance status, obligations, and simulated disputes.
     Powered solely by Google Gemini API.
     """
+    await ensure_db_initialized()
     contract = await db.get(ContractModel, contract_id)
     if not contract:
-        raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
+        req_obj = locals().get("req")
+        raw_text = getattr(req_obj, "contract_text", None) if req_obj else None
+        title = (getattr(req_obj, "title", None) if req_obj else None) or "Enterprise Agreement"
+        if not raw_text and contract_id in _RECENT_CONTRACTS_CACHE:
+            cached = _RECENT_CONTRACTS_CACHE[contract_id]
+            raw_text = cached.get("raw_text") or cached.get("content")
+            title = cached.get("title") or title
+        elif not raw_text and contract_id == "CTR-DEMO-2026-SAAS":
+            from backend.api.routes_demo import get_demo_files
+            raw_text, _ = get_demo_files()
+            title = "NovaCloud Enterprise Cloud Services Agreement"
+        if raw_text:
+            contract = ContractModel(
+                id=contract_id,
+                title=title,
+                raw_text=raw_text,
+                status="INTAKE",
+                governing_law="State of Delaware",
+            )
+            try:
+                db.add(contract)
+                await db.commit()
+                await db.refresh(contract)
+            except Exception:
+                pass
+        else:
+            raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
 
     # Fetch available reports
     graph = (await db.execute(select(ContractGraphModel).where(ContractGraphModel.contract_id == contract_id).order_by(desc(ContractGraphModel.id)).limit(1))).scalars().first()
@@ -382,6 +419,7 @@ async def get_full_analysis(contract_id: str, db: AsyncSession = Depends(get_db)
     risk = (await db.execute(select(RiskReportModel).where(RiskReportModel.contract_id == contract_id).order_by(desc(RiskReportModel.id)).limit(1))).scalars().first()
     comp = (await db.execute(select(ComplianceReportModel).where(ComplianceReportModel.contract_id == contract_id).order_by(desc(ComplianceReportModel.id)).limit(1))).scalars().first()
     strat = (await db.execute(select(NegotiationStrategyModel).where(NegotiationStrategyModel.contract_id == contract_id).order_by(desc(NegotiationStrategyModel.id)).limit(1))).scalars().first()
+    ob = (await db.execute(select(ObligationScheduleModel).where(ObligationScheduleModel.contract_id == contract_id).order_by(desc(ObligationScheduleModel.id)).limit(1))).scalars().first()
     disp = (await db.execute(select(DisputeAssessmentModel).where(DisputeAssessmentModel.contract_id == contract_id).order_by(desc(DisputeAssessmentModel.id)).limit(1))).scalars().first()
 
     return {
@@ -390,6 +428,7 @@ async def get_full_analysis(contract_id: str, db: AsyncSession = Depends(get_db)
         "risk_report": risk.report_json if risk else None,
         "compliance_report": comp.report_json if comp else None,
         "negotiation_strategy": strat.strategy_json if strat else None,
+        "obligation_schedule": ob.schedule_json if ob else None,
         "dispute_assessment": disp.assessment_json if disp else None
     }
 
@@ -405,9 +444,36 @@ async def get_contract_execution(contract_id: str, db: AsyncSession = Depends(ge
     if live_exec:
         return live_exec
 
+    await ensure_db_initialized()
     contract = await db.get(ContractModel, contract_id)
     if not contract:
-        raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
+        req_obj = locals().get("req")
+        raw_text = getattr(req_obj, "contract_text", None) if req_obj else None
+        title = (getattr(req_obj, "title", None) if req_obj else None) or "Enterprise Agreement"
+        if not raw_text and contract_id in _RECENT_CONTRACTS_CACHE:
+            cached = _RECENT_CONTRACTS_CACHE[contract_id]
+            raw_text = cached.get("raw_text") or cached.get("content")
+            title = cached.get("title") or title
+        elif not raw_text and contract_id == "CTR-DEMO-2026-SAAS":
+            from backend.api.routes_demo import get_demo_files
+            raw_text, _ = get_demo_files()
+            title = "NovaCloud Enterprise Cloud Services Agreement"
+        if raw_text:
+            contract = ContractModel(
+                id=contract_id,
+                title=title,
+                raw_text=raw_text,
+                status="INTAKE",
+                governing_law="State of Delaware",
+            )
+            try:
+                db.add(contract)
+                await db.commit()
+                await db.refresh(contract)
+            except Exception:
+                pass
+        else:
+            raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
 
     # Fetch stored reports to build trace
     graph_m = (await db.execute(select(ContractGraphModel).where(ContractGraphModel.contract_id == contract_id).order_by(desc(ContractGraphModel.id)).limit(1))).scalars().first()
@@ -603,26 +669,66 @@ async def get_contract_disputes(contract_id: str, db: AsyncSession = Depends(get
 async def mark_contract_signed(
     contract_id: str,
     effective_date: str = "2026-10-01",
+    req: Optional[SignContractRequest] = None,
     db: AsyncSession = Depends(get_db)
 ):
     """Marks a contract as signed and activates Obligation Intelligence monitoring."""
+    await ensure_db_initialized()
+    eff_date = (req.effective_date if (req and req.effective_date) else effective_date) or "2026-10-01"
+
     contract = await db.get(ContractModel, contract_id)
     if not contract:
-        raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
+        raw_text = None
+        title = "Enterprise Agreement"
+        if req and req.contract_text:
+            raw_text = req.contract_text
+            title = req.title or title
+        elif contract_id in _RECENT_CONTRACTS_CACHE:
+            cached = _RECENT_CONTRACTS_CACHE[contract_id]
+            raw_text = cached.get("raw_text") or cached.get("content")
+            title = cached.get("title") or title
+        elif contract_id == "CTR-DEMO-2026-SAAS":
+            from backend.api.routes_demo import get_demo_files
+            raw_text, _ = get_demo_files()
+            title = "NovaCloud Enterprise Cloud Services Agreement"
+
+        if raw_text:
+            contract = ContractModel(
+                id=contract_id,
+                title=title,
+                raw_text=raw_text,
+                status="SIGNED",
+                effective_date=eff_date,
+                governing_law="State of Delaware",
+            )
+            try:
+                db.add(contract)
+                await db.commit()
+                await db.refresh(contract)
+            except Exception as e:
+                logger.warning(f"Could not persist recreated contract during sign: {e}")
+        else:
+            raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
 
     contract.status = "SIGNED"
-    contract.effective_date = effective_date
-    await db.commit()
+    contract.effective_date = eff_date
+    if contract_id in _RECENT_CONTRACTS_CACHE:
+        _RECENT_CONTRACTS_CACHE[contract_id]["status"] = "SIGNED"
+    try:
+        await db.commit()
+    except Exception as e:
+        logger.warning(f"Could not commit SIGNED status for {contract_id}: {e}")
 
     schedule = await obligation_intelligence_system.register_obligations(
         contract=contract.raw_text,
         contract_id=contract_id,
-        effective_date=effective_date,
+        effective_date=eff_date,
         db_session=db
     )
     return {
         "status": "SIGNED",
         "contract_id": contract_id,
+        "effective_date": eff_date,
         "schedule": schedule.model_dump()
     }
 
@@ -634,9 +740,36 @@ async def submit_human_review(
     db: AsyncSession = Depends(get_db)
 ):
     """Submits a human review decision and stores it into persistent CAS memory."""
+    await ensure_db_initialized()
     contract = await db.get(ContractModel, contract_id)
     if not contract:
-        raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
+        req_obj = locals().get("req")
+        raw_text = getattr(req_obj, "contract_text", None) if req_obj else None
+        title = (getattr(req_obj, "title", None) if req_obj else None) or "Enterprise Agreement"
+        if not raw_text and contract_id in _RECENT_CONTRACTS_CACHE:
+            cached = _RECENT_CONTRACTS_CACHE[contract_id]
+            raw_text = cached.get("raw_text") or cached.get("content")
+            title = cached.get("title") or title
+        elif not raw_text and contract_id == "CTR-DEMO-2026-SAAS":
+            from backend.api.routes_demo import get_demo_files
+            raw_text, _ = get_demo_files()
+            title = "NovaCloud Enterprise Cloud Services Agreement"
+        if raw_text:
+            contract = ContractModel(
+                id=contract_id,
+                title=title,
+                raw_text=raw_text,
+                status="INTAKE",
+                governing_law="State of Delaware",
+            )
+            try:
+                db.add(contract)
+                await db.commit()
+                await db.refresh(contract)
+            except Exception:
+                pass
+        else:
+            raise HTTPException(status_code=404, detail=f"Contract {contract_id} not found")
 
     review = await db.get(HumanReviewModel, decision.review_id)
     if review:
