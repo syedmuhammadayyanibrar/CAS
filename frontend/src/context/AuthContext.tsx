@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import {
   AuthUser,
+  OTPDispatchResponse,
   getStoredAccessToken,
   setStoredAccessToken,
   apiLogin,
   apiRegister,
+  apiRequestOtp,
+  apiVerifyOtp,
   apiGuestLogin,
   apiGoogleLogin,
   apiLogout,
@@ -13,20 +16,39 @@ import {
   UNAUTHORIZED_EVENT,
 } from "../api/client";
 
+interface RegisterResult {
+  requires_verification?: boolean;
+  otp_expires_in_seconds?: number;
+  resend_wait_seconds?: number;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   role: string | null;
   isAuthenticated: boolean;
   isGuest: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName?: string) => Promise<{ requires_verification?: boolean }>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    fullName?: string,
+    rememberMe?: boolean
+  ) => Promise<RegisterResult>;
+  requestOtp: (
+    email: string,
+    purpose?: "login" | "register" | "verification"
+  ) => Promise<OTPDispatchResponse>;
+  verifyOtp: (email: string, otp: string, rememberMe?: boolean) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
   loginAsGuest: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Proactively refresh the 15-minute access token every 12 minutes so active sessions never drop
+const PROACTIVE_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -48,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const profile = await fetchCurrentUser();
           setUser(profile);
         } else {
-          // Attempt silent refresh via cookie
+          // Attempt silent refresh via HttpOnly refresh cookie
           const newToken = await refreshAccessToken();
           if (newToken) {
             const profile = await fetchCurrentUser();
@@ -65,15 +87,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const res = await apiLogin(email, password);
+  // Proactive background refresh timer for authenticated non-guest sessions
+  useEffect(() => {
+    if (!user || user.role === "guest") return;
+    const interval = setInterval(() => {
+      refreshAccessToken().catch(() => {});
+    }, PROACTIVE_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const login = async (email: string, password: string, rememberMe: boolean = false) => {
+    const res = await apiLogin(email, password, rememberMe);
     setUser(res.user);
   };
 
-  const register = async (email: string, password: string, fullName?: string) => {
-    const res = await apiRegister(email, password, fullName);
+  const register = async (
+    email: string,
+    password: string,
+    fullName?: string,
+    rememberMe: boolean = false
+  ): Promise<RegisterResult> => {
+    const res = await apiRegister(email, password, fullName, rememberMe);
+    // Only set user immediately if OTP verification is not required
+    if (!res.requires_verification) {
+      setUser(res.user);
+    }
+    return {
+      requires_verification: res.requires_verification,
+      otp_expires_in_seconds: res.otp_expires_in_seconds,
+      resend_wait_seconds: res.resend_wait_seconds,
+    };
+  };
+
+  const requestOtp = async (
+    email: string,
+    purpose: "login" | "register" | "verification" = "login"
+  ): Promise<OTPDispatchResponse> => {
+    return apiRequestOtp(email, purpose);
+  };
+
+  const verifyOtp = async (email: string, otp: string, rememberMe: boolean = false) => {
+    const res = await apiVerifyOtp(email, otp, rememberMe);
     setUser(res.user);
-    return { requires_verification: res.requires_verification };
   };
 
   const loginWithGoogle = async (credential: string) => {
@@ -105,6 +160,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         login,
         register,
+        requestOtp,
+        verifyOtp,
         loginWithGoogle,
         loginAsGuest,
         logout,

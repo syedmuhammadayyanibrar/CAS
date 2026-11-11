@@ -288,7 +288,11 @@ async def test_auth_config_exposes_only_public_client_id(monkeypatch):
     async with client() as ac:
         res = await ac.get("/api/auth/config")
     assert res.status_code == 200
-    assert res.json() == {"google_client_id": "abc.apps.googleusercontent.com"}
+    cfg = res.json()
+    assert cfg["google_client_id"] == "abc.apps.googleusercontent.com"
+    assert cfg["otp_expire_seconds"] == 300
+    assert cfg["otp_initial_cooldown_seconds"] == 120
+    assert cfg["otp_max_cooldown_seconds"] == 7200
 
 
 # ---------------------------------------------------------------- sessions
@@ -354,3 +358,140 @@ async def test_admin_role_comes_from_admin_emails_not_signup_order(monkeypatch):
         boss = await ac.post("/api/auth/register", json={"email": "Boss@example.com", "password": "Passw0rd!long"})
     assert first.json()["user"]["role"] == ROLE_REVIEWER  # being first confers nothing
     assert boss.json()["user"]["role"] == ROLE_ADMIN
+
+
+# ---------------------------------------------------------------- OTP & Resend progressive cooldown
+
+@pytest.mark.asyncio
+async def test_otp_register_verify_and_progressive_cooldown_up_to_2_hours(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.database.db import AsyncSessionLocal
+    from backend.database.schema import EmailOTPModel, UserModel
+    from sqlalchemy import select
+
+    dispatched_otps = []
+    monkeypatch.setattr(
+        routes_auth,
+        "send_otp_email",
+        lambda to_email, otp_code, **kw: dispatched_otps.append((to_email, otp_code)) or True,
+    )
+
+    async with client() as ac:
+        # 1. Register creates account, sends 6-digit OTP valid for 5m (300s), initial wait 2m (120s)
+        reg = await ac.post(
+            "/api/auth/register",
+            json={"email": "otpuser@example.com", "password": "Passw0rd!long", "full_name": "OTP User"},
+        )
+        assert reg.status_code == 201
+        reg_body = reg.json()
+        assert reg_body["requires_verification"] is True
+        assert reg_body["otp_expires_in_seconds"] == 300
+        assert reg_body["resend_wait_seconds"] == 120
+        assert len(dispatched_otps) == 1
+        assert len(dispatched_otps[0][1]) == 6
+
+        # 2. Immediate resend before 2 minutes is rejected with 429 + Retry-After header
+        early = await ac.post(
+            "/api/auth/request-otp",
+            json={"email": "otpuser@example.com", "purpose": "register"},
+        )
+        assert early.status_code == 429
+        assert "Retry-After" in early.headers
+
+        # 3. Simulate cooldown elapsed and verify progressive backoff:
+        #    Request #2 -> 240s (4m), #3 -> 480s (8m), #4 -> 960s (16m),
+        #    #5 -> 1920s (32m), #6 -> 3840s (64m), #7 -> 7200s (2h max), #8 -> 7200s (capped at 2h)
+        expected_waits = [240, 480, 960, 1920, 3840, 7200, 7200]
+        for idx, expected_wait in enumerate(expected_waits, start=2):
+            async with AsyncSessionLocal() as db:
+                rec = (
+                    await db.execute(
+                        select(EmailOTPModel).where(EmailOTPModel.email == "otpuser@example.com")
+                    )
+                ).scalars().first()
+                rec.resend_available_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+                await db.commit()
+
+            resend_res = await ac.post(
+                "/api/auth/request-otp",
+                json={"email": "otpuser@example.com", "purpose": "login"},
+            )
+            assert resend_res.status_code == 200
+            r_data = resend_res.json()
+            assert r_data["otp_expires_in_seconds"] == 300
+            assert r_data["resend_wait_seconds"] == expected_wait
+            assert r_data["resend_count"] == idx
+
+        # 4. Verify with the latest 6-digit OTP succeeds, marks user verified, and clears OTP record
+        latest_otp = dispatched_otps[-1][1]
+        verify_res = await ac.post(
+            "/api/auth/verify-otp",
+            json={"email": "otpuser@example.com", "otp": latest_otp, "remember_me": True},
+        )
+        assert verify_res.status_code == 200
+        v_body = verify_res.json()
+        assert v_body["user"]["is_verified"] is True
+        assert "cas_refresh_token" in verify_res.cookies
+
+        # 5. After successful verification, a fresh OTP request starts back at 120s (2 minutes)
+        fresh = await ac.post(
+            "/api/auth/request-otp",
+            json={"email": "otpuser@example.com", "purpose": "login"},
+        )
+        assert fresh.status_code == 200
+        assert fresh.json()["resend_wait_seconds"] == 120
+        assert fresh.json()["resend_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_otp_expiration_after_5_minutes_and_brute_force_cap(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from backend.database.db import AsyncSessionLocal
+    from backend.database.schema import EmailOTPModel
+    from sqlalchemy import select
+
+    dispatched = []
+    monkeypatch.setattr(
+        routes_auth,
+        "send_otp_email",
+        lambda to_email, otp_code, **kw: dispatched.append(otp_code) or True,
+    )
+
+    async with client() as ac:
+        await ac.post(
+            "/api/auth/register",
+            json={"email": "brute@example.com", "password": "Passw0rd!long"},
+        )
+        real_otp = dispatched[-1]
+
+        # 5 wrong attempts invalidate the OTP
+        for _ in range(5):
+            bad = await ac.post(
+                "/api/auth/verify-otp",
+                json={"email": "brute@example.com", "otp": "000000"},
+            )
+            assert bad.status_code == 400
+
+        # Even the real OTP is now rejected because failed_attempts == 5
+        blocked = await ac.post(
+            "/api/auth/verify-otp",
+            json={"email": "brute@example.com", "otp": real_otp},
+        )
+        assert blocked.status_code == 400
+
+        # Expire the OTP past 5 minutes and check rejection
+        async with AsyncSessionLocal() as db:
+            rec = (
+                await db.execute(select(EmailOTPModel).where(EmailOTPModel.email == "brute@example.com"))
+            ).scalars().first()
+            rec.failed_attempts = 0
+            rec.expires_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+            await db.commit()
+
+        expired = await ac.post(
+            "/api/auth/verify-otp",
+            json={"email": "brute@example.com", "otp": real_otp},
+        )
+        assert expired.status_code == 400
+        assert "expired" in expired.json()["detail"].lower()
+

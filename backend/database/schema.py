@@ -226,3 +226,17 @@ class RefreshTokenModel(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class EmailOTPModel(Base):
+    __tablename__ = "email_otps"
+
+    email = Column(String(255), primary_key=True)
+    otp_hash = Column(String(255), nullable=False)
+    purpose = Column(String(50), nullable=False, default="verification")  # register, login, verification
+    expires_at = Column(DateTime, nullable=False)
+    resend_available_at = Column(DateTime, nullable=False)
+    resend_count = Column(Integer, nullable=False, default=1)
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
+

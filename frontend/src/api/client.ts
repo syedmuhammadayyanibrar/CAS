@@ -255,6 +255,17 @@ export interface AuthResponse {
   token_type: string;
   user: AuthUser;
   requires_verification?: boolean;
+  otp_expires_in_seconds?: number;
+  resend_wait_seconds?: number;
+  session_expires_in_seconds?: number;
+}
+
+export interface OTPDispatchResponse {
+  message: string;
+  email: string;
+  otp_expires_in_seconds: number;
+  resend_wait_seconds: number;
+  resend_count: number;
 }
 
 // The access token lives in memory only (never in web storage) so an XSS bug cannot
@@ -334,19 +345,23 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
   return res;
 }
 
-export async function apiLogin(email: string, password: string): Promise<AuthResponse> {
+export async function apiLogin(
+  email: string,
+  password: string,
+  rememberMe: boolean = false
+): Promise<AuthResponse> {
   let res = await fetch(`${API_BASE}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, remember_me: rememberMe }),
   });
   if (res.status === 404) {
     res = await fetch(`${API_BASE}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, remember_me: rememberMe }),
     });
   }
   if (!res.ok) {
@@ -358,24 +373,92 @@ export async function apiLogin(email: string, password: string): Promise<AuthRes
   return data;
 }
 
-export async function apiRegister(email: string, password: string, fullName?: string): Promise<AuthResponse> {
+export async function apiRegister(
+  email: string,
+  password: string,
+  fullName?: string,
+  rememberMe: boolean = false
+): Promise<AuthResponse> {
   let res = await fetch(`${API_BASE}/api/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password, full_name: fullName }),
+    body: JSON.stringify({ email, password, full_name: fullName, remember_me: rememberMe }),
   });
   if (res.status === 404) {
     res = await fetch(`${API_BASE}/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, password, full_name: fullName }),
+      body: JSON.stringify({ email, password, full_name: fullName, remember_me: rememberMe }),
     });
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Registration failed.");
+  }
+  const data: AuthResponse = await res.json();
+  if (!data.requires_verification) {
+    setStoredAccessToken(data.access_token);
+  }
+  return data;
+}
+
+export async function apiRequestOtp(
+  email: string,
+  purpose: "login" | "register" | "verification" = "login"
+): Promise<OTPDispatchResponse> {
+  let res = await fetch(`${API_BASE}/api/auth/request-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, purpose }),
+  });
+  if (res.status === 404) {
+    const body404 = await res.clone().json().catch(() => ({}));
+    if (!body404.detail) {
+      res = await fetch(`${API_BASE}/auth/request-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, purpose }),
+      });
+    }
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const retryHeader = res.headers.get("Retry-After");
+    const errorObj: any = new Error(err.detail || "Failed to send verification code.");
+    if (retryHeader) {
+      errorObj.retryAfterSeconds = parseInt(retryHeader, 10) || undefined;
+    }
+    throw errorObj;
+  }
+  return res.json();
+}
+
+export async function apiVerifyOtp(
+  email: string,
+  otp: string,
+  rememberMe: boolean = false
+): Promise<AuthResponse> {
+  let res = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ email, otp, remember_me: rememberMe }),
+  });
+  if (res.status === 404) {
+    res = await fetch(`${API_BASE}/auth/verify-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email, otp, remember_me: rememberMe }),
+    });
+  }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Invalid or expired verification code.");
   }
   const data: AuthResponse = await res.json();
   setStoredAccessToken(data.access_token);

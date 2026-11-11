@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     JWT_ISSUER: str = "cas-api"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    JWT_REMEMBER_ME_DAYS: int = 30
     ADMIN_EMAILS: str = ""  # Comma-separated emails that receive the admin role on signup
     JWT_GUEST_TOKEN_EXPIRE_MINUTES: int = 60
     ALLOWED_ORIGINS: list[str] = [
@@ -86,7 +87,13 @@ class Settings(BaseSettings):
     COOKIE_SAMESITE: str = "lax"
     FASTN_WEBHOOK_SECRET: Optional[str] = None
 
-    # Email Verification Settings
+    # Email & Resend OTP Settings
+    RESEND_API_KEY: Optional[str] = None
+    RESEND_FROM_EMAIL: str = "Contract Agentic Society <onboarding@resend.dev>"
+    OTP_EXPIRE_SECONDS: int = 300            # 5 minutes valid time
+    OTP_INITIAL_COOLDOWN_SECONDS: int = 120  # 2 minutes initial resend wait
+    OTP_MAX_COOLDOWN_SECONDS: int = 7200     # 2 hours maximum progressive wait
+    OTP_MAX_FAILED_ATTEMPTS: int = 5         # Brute-force cap per OTP code
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587
     SMTP_USER: Optional[str] = None
