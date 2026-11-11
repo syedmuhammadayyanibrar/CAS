@@ -608,7 +608,7 @@ export function LoginPage() {
                       onChange={(e) => setRememberMe(e.target.checked)}
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
-                    <span>Keep me signed in (30-day session)</span>
+                    <span>Keep me signed in</span>
                   </label>
                 </div>
 
