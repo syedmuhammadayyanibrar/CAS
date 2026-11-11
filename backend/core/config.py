@@ -74,9 +74,12 @@ class Settings(BaseSettings):
     ADMIN_EMAILS: str = ""  # Comma-separated emails that receive the admin role on signup
     JWT_GUEST_TOKEN_EXPIRE_MINUTES: int = 60
     ALLOWED_ORIGINS: list[str] = [
+        "https://cas-ochre.vercel.app",
         "http://localhost:5173",
+        "http://localhost:8000",
         "http://localhost:3000",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
         "http://127.0.0.1:3000",
     ]
     COOKIE_SECURE: bool = bool(os.getenv("VERCEL"))  # Secure cookies by default on HTTPS (Vercel)

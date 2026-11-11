@@ -517,3 +517,34 @@ async def google_auth(
             "is_verified": True,
         },
     )
+
+
+@router.api_route("/google/callback", methods=["GET", "POST"])
+async def google_auth_callback(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Handles Google OAuth redirect callback (/auth/google/callback and /api/auth/google/callback).
+    Supports Google Identity Services POST form credential or query credential, sets the
+    HttpOnly refresh cookie, and redirects the browser to the application root.
+    """
+    from fastapi.responses import RedirectResponse
+
+    credential = request.query_params.get("credential") or request.query_params.get("id_token")
+    if not credential and request.method == "POST":
+        try:
+            form = await request.form()
+            credential = form.get("credential") or form.get("id_token")
+        except Exception:
+            pass
+
+    redirect = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    if credential:
+        await google_auth(
+            data=GoogleAuthRequest(credential=str(credential)),
+            request=request,
+            response=redirect,
+            db=db,
+        )
+    return redirect
