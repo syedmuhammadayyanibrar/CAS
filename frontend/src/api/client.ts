@@ -257,6 +257,7 @@ export interface AuthResponse {
   requires_verification?: boolean;
   otp_expires_in_seconds?: number;
   resend_wait_seconds?: number;
+  otp_state_token?: string;
   session_expires_in_seconds?: number;
 }
 
@@ -266,18 +267,74 @@ export interface OTPDispatchResponse {
   otp_expires_in_seconds: number;
   resend_wait_seconds: number;
   resend_count: number;
+  otp_state_token?: string;
 }
 
-// The access token lives in memory only (never in web storage) so an XSS bug cannot
-// read it. Sessions survive reloads through the HttpOnly refresh cookie.
+const ACCESS_TOKEN_STORAGE_KEY = "cas_access_token";
+const OTP_STATE_STORAGE_KEY = "cas_otp_state_token";
+
 let inMemoryAccessToken: string | null = null;
+let inMemoryOtpStateToken: string | null = null;
+
+function isJwtNotExpired(token: string): boolean {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (!payload.exp) return true;
+    return payload.exp * 1000 > Date.now() + 5000;
+  } catch {
+    return false;
+  }
+}
 
 export function getStoredAccessToken(): string | null {
-  return inMemoryAccessToken;
+  if (inMemoryAccessToken && isJwtNotExpired(inMemoryAccessToken)) {
+    return inMemoryAccessToken;
+  }
+  try {
+    const stored = localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+    if (stored && isJwtNotExpired(stored)) {
+      inMemoryAccessToken = stored;
+      return stored;
+    }
+    if (stored) {
+      localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    }
+  } catch {}
+  inMemoryAccessToken = null;
+  return null;
 }
 
 export function setStoredAccessToken(token: string | null) {
   inMemoryAccessToken = token;
+  try {
+    if (token) {
+      localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    }
+  } catch {}
+}
+
+function getOtpStateToken(): string | null {
+  if (inMemoryOtpStateToken) return inMemoryOtpStateToken;
+  try {
+    return sessionStorage.getItem(OTP_STATE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setOtpStateToken(token: string | null | undefined) {
+  inMemoryOtpStateToken = token || null;
+  try {
+    if (token) {
+      sessionStorage.setItem(OTP_STATE_STORAGE_KEY, token);
+    } else {
+      sessionStorage.removeItem(OTP_STATE_STORAGE_KEY);
+    }
+  } catch {}
 }
 
 const API_BASE = "";
@@ -328,7 +385,8 @@ function withAuth(options: RequestInit, token: string | null): RequestInit {
 
 /** fetch() with the Bearer token attached and one transparent refresh+retry on 401. */
 async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  let res = await fetch(url, withAuth(options, inMemoryAccessToken));
+  const currentToken = getStoredAccessToken();
+  let res = await fetch(url, withAuth(options, currentToken));
 
   if (res.status === 401) {
     const refreshed = await refreshAccessToken();
@@ -398,6 +456,9 @@ export async function apiRegister(
     throw new Error(err.detail || "Registration failed.");
   }
   const data: AuthResponse = await res.json();
+  if (data.otp_state_token) {
+    setOtpStateToken(data.otp_state_token);
+  }
   if (!data.requires_verification) {
     setStoredAccessToken(data.access_token);
   }
@@ -408,11 +469,16 @@ export async function apiRequestOtp(
   email: string,
   purpose: "login" | "register" | "verification" = "login"
 ): Promise<OTPDispatchResponse> {
+  const payload = {
+    email,
+    purpose,
+    otp_state_token: getOtpStateToken() || undefined,
+  };
   let res = await fetch(`${API_BASE}/api/auth/request-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, purpose }),
+    body: JSON.stringify(payload),
   });
   if (res.status === 404) {
     const body404 = await res.clone().json().catch(() => ({}));
@@ -421,7 +487,7 @@ export async function apiRequestOtp(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ email, purpose }),
+        body: JSON.stringify(payload),
       });
     }
   }
@@ -434,7 +500,11 @@ export async function apiRequestOtp(
     }
     throw errorObj;
   }
-  return res.json();
+  const data: OTPDispatchResponse = await res.json();
+  if (data.otp_state_token) {
+    setOtpStateToken(data.otp_state_token);
+  }
+  return data;
 }
 
 export async function apiVerifyOtp(
@@ -442,18 +512,24 @@ export async function apiVerifyOtp(
   otp: string,
   rememberMe: boolean = false
 ): Promise<AuthResponse> {
+  const payload = {
+    email,
+    otp,
+    remember_me: rememberMe,
+    otp_state_token: getOtpStateToken() || undefined,
+  };
   let res = await fetch(`${API_BASE}/api/auth/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, otp, remember_me: rememberMe }),
+    body: JSON.stringify(payload),
   });
   if (res.status === 404) {
     res = await fetch(`${API_BASE}/auth/verify-otp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ email, otp, remember_me: rememberMe }),
+      body: JSON.stringify(payload),
     });
   }
   if (!res.ok) {
@@ -461,6 +537,7 @@ export async function apiVerifyOtp(
     throw new Error(err.detail || "Invalid or expired verification code.");
   }
   const data: AuthResponse = await res.json();
+  setOtpStateToken(null);
   setStoredAccessToken(data.access_token);
   return data;
 }

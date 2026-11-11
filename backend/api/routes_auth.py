@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import select, update, delete
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -20,6 +20,9 @@ from backend.core.auth import (
     create_access_token,
     create_guest_token,
     create_refresh_token,
+    decode_refresh_token,
+    encode_signed_state,
+    decode_signed_state,
     get_current_user_payload,
     rate_limit,
     client_ip,
@@ -27,12 +30,14 @@ from backend.core.auth import (
 )
 from backend.database.db import get_db, ensure_db_initialized
 from backend.database.schema import UserModel, RefreshTokenModel, EmailOTPModel
-from backend.core.email_service import send_otp_email, send_verification_email
+from backend.core.email_service import send_otp_email
 
 logger = get_logger("AuthAPI")
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 REFRESH_COOKIE_NAME = "cas_refresh_token"
+OTP_STATE_COOKIE_NAME = "cas_otp_state"
+ACCOUNT_HINT_COOKIE_NAME = "cas_account_hint"
 
 
 class RegisterRequest(BaseModel):
@@ -51,12 +56,14 @@ class LoginRequest(BaseModel):
 class RequestOTPRequest(BaseModel):
     email: EmailStr
     purpose: str = Field(default="login", pattern="^(login|register|verification)$")
+    otp_state_token: Optional[str] = None
 
 
 class VerifyOTPRequest(BaseModel):
     email: EmailStr
     otp: str = Field(..., min_length=4, max_length=12)
     remember_me: bool = False
+    otp_state_token: Optional[str] = None
 
 
 class GoogleAuthRequest(BaseModel):
@@ -74,6 +81,7 @@ class OTPDispatchResponse(BaseModel):
     otp_expires_in_seconds: int
     resend_wait_seconds: int
     resend_count: int
+    otp_state_token: Optional[str] = None
 
 
 class AuthResponse(BaseModel):
@@ -83,6 +91,7 @@ class AuthResponse(BaseModel):
     requires_verification: Optional[bool] = False
     otp_expires_in_seconds: Optional[int] = None
     resend_wait_seconds: Optional[int] = None
+    otp_state_token: Optional[str] = None
     session_expires_in_seconds: int = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
 
 
@@ -108,12 +117,132 @@ def _compute_progressive_cooldown(resend_count: int) -> int:
     return min(cooldown, settings.OTP_MAX_COOLDOWN_SECONDS)
 
 
+def _set_account_hint_cookie(response: Response, user: UserModel):
+    """
+    Stores a cryptographically signed HttpOnly account hint cookie so serverless
+    workers with ephemeral per-instance SQLite can rehydrate the user record on login/OTP.
+    """
+    token = encode_signed_state(
+        {
+            "type": "account_hint",
+            "uid": user.id,
+            "email": user.email,
+            "name": user.full_name,
+            "role": user.role,
+            "pwd_hash": user.hashed_password,
+            "verified": bool(user.is_verified),
+        },
+        expire_seconds=90 * 24 * 3600,
+    )
+    response.set_cookie(
+        key=ACCOUNT_HINT_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=90 * 24 * 3600,
+        path="/",
+    )
+
+
+def _build_otp_state_token(user: UserModel, otp_rec: EmailOTPModel) -> str:
+    return encode_signed_state(
+        {
+            "type": "otp_state",
+            "uid": user.id,
+            "email": user.email,
+            "name": user.full_name,
+            "role": user.role,
+            "pwd_hash": user.hashed_password,
+            "otp_hash": otp_rec.otp_hash,
+            "purpose": otp_rec.purpose,
+            "expires_ts": _as_utc(otp_rec.expires_at).timestamp(),
+            "resend_ts": _as_utc(otp_rec.resend_available_at).timestamp(),
+            "resend_count": otp_rec.resend_count,
+            "failed_attempts": otp_rec.failed_attempts,
+        },
+        expire_seconds=max(settings.OTP_MAX_COOLDOWN_SECONDS + 600, 7800),
+    )
+
+
+def _set_otp_state_cookie(response: Response, state_token: str):
+    response.set_cookie(
+        key=OTP_STATE_COOKIE_NAME,
+        value=state_token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        max_age=max(settings.OTP_MAX_COOLDOWN_SECONDS + 600, 7800),
+        path="/",
+    )
+
+
+async def _rehydrate_from_signed_cookies(
+    db: AsyncSession,
+    request: Request,
+    norm_email: str,
+    explicit_otp_token: Optional[str] = None,
+) -> Tuple[Optional[UserModel], Optional[EmailOTPModel]]:
+    """
+    Ensures UserModel and EmailOTPModel exist in the current serverless worker's SQLite DB
+    by checking the database first and falling back to cryptographically signed state tokens.
+    """
+    user = (await db.execute(select(UserModel).where(UserModel.email == norm_email))).scalars().first()
+    otp_rec = (await db.execute(select(EmailOTPModel).where(EmailOTPModel.email == norm_email))).scalars().first()
+
+    raw_otp_token = explicit_otp_token or request.cookies.get(OTP_STATE_COOKIE_NAME)
+    otp_state = decode_signed_state(raw_otp_token, "otp_state")
+    if otp_state and (otp_state.get("email") or "").strip().lower() == norm_email:
+        if not user and otp_state.get("uid") and otp_state.get("pwd_hash"):
+            user = UserModel(
+                id=otp_state["uid"],
+                email=norm_email,
+                hashed_password=otp_state["pwd_hash"],
+                full_name=otp_state.get("name") or norm_email.split("@")[0],
+                role=otp_state.get("role") or "reviewer",
+                is_active=True,
+                is_verified=False,
+            )
+            db.add(user)
+            await db.flush()
+        if not otp_rec and otp_state.get("otp_hash"):
+            otp_rec = EmailOTPModel(
+                email=norm_email,
+                otp_hash=otp_state["otp_hash"],
+                purpose=otp_state.get("purpose", "verification"),
+                expires_at=datetime.fromtimestamp(float(otp_state["expires_ts"]), tz=timezone.utc),
+                resend_available_at=datetime.fromtimestamp(float(otp_state["resend_ts"]), tz=timezone.utc),
+                resend_count=int(otp_state.get("resend_count", 1)),
+                failed_attempts=int(otp_state.get("failed_attempts", 0)),
+                updated_at=datetime.now(timezone.utc),
+            )
+            db.add(otp_rec)
+            await db.flush()
+
+    if not user:
+        acct_state = decode_signed_state(request.cookies.get(ACCOUNT_HINT_COOKIE_NAME), "account_hint")
+        if acct_state and (acct_state.get("email") or "").strip().lower() == norm_email:
+            user = UserModel(
+                id=acct_state["uid"],
+                email=norm_email,
+                hashed_password=acct_state["pwd_hash"],
+                full_name=acct_state.get("name") or norm_email.split("@")[0],
+                role=acct_state.get("role") or "reviewer",
+                is_active=True,
+                is_verified=bool(acct_state.get("verified", False)),
+            )
+            db.add(user)
+            await db.flush()
+
+    return user, otp_rec
+
+
 async def _issue_account_otp(
     db: AsyncSession,
     email: str,
     full_name: Optional[str],
     purpose: str = "verification",
-) -> Tuple[str, int, int, int]:
+) -> Tuple[str, int, int, int, EmailOTPModel]:
     """
     Generates a 6-digit OTP with 5-minute validity, enforces the 2-minute initial wait
     and progressive exponential backoff (capped at 2 hours) for repeated requests on
@@ -134,7 +263,6 @@ async def _issue_account_otp(
                 detail=f"Please wait {wait_seconds} seconds before requesting another OTP code.",
                 headers={"Retry-After": str(wait_seconds)},
             )
-        # Reset counter if previous OTP record was from more than 24 hours ago
         last_updated = _as_utc(otp_rec.updated_at) if otp_rec.updated_at else now_utc
         if (now_utc - last_updated).total_seconds() > 86400:
             resend_count = 1
@@ -180,7 +308,7 @@ async def _issue_account_otp(
         valid_minutes=max(1, expire_seconds // 60),
     )
 
-    return otp_code, expire_seconds, cooldown_seconds, resend_count
+    return otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec
 
 
 def _set_refresh_cookie(response: Response, token: str, expire_days: Optional[int] = None):
@@ -223,16 +351,26 @@ def _issue_session_tokens(
         if remember_me
         else settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
     )
-    raw_refresh = create_refresh_token()
+    actual_family_id = family_id or uuid.uuid4().hex
+    raw_refresh = create_refresh_token(
+        user_id=user.id,
+        email=user.email,
+        role=user.role,
+        full_name=user.full_name,
+        family_id=actual_family_id,
+        expire_days=expire_days,
+        remember_me=remember_me,
+    )
     refresh_rec = RefreshTokenModel(
         token_hash=hash_token(raw_refresh),
         user_id=user.id,
-        family_id=family_id or uuid.uuid4().hex,
+        family_id=actual_family_id,
         is_revoked=False,
         expires_at=datetime.now(timezone.utc) + timedelta(days=expire_days),
     )
     db.add(refresh_rec)
     _set_refresh_cookie(response, raw_refresh, expire_days=expire_days)
+    _set_account_hint_cookie(response, user)
     return access_token
 
 
@@ -276,7 +414,7 @@ async def register(
     )
     db.add(new_user)
 
-    otp_code, expire_seconds, cooldown_seconds, _ = await _issue_account_otp(
+    otp_code, expire_seconds, cooldown_seconds, _, otp_rec = await _issue_account_otp(
         db=db,
         email=new_user.email,
         full_name=new_user.full_name,
@@ -290,6 +428,8 @@ async def register(
         user=new_user,
         remember_me=data.remember_me,
     )
+    state_token = _build_otp_state_token(new_user, otp_rec)
+    _set_otp_state_cookie(response, state_token)
     await db.commit()
 
     logger.info(f"User registered & OTP dispatched: {new_user.email} (Role: {new_user.role})")
@@ -299,6 +439,7 @@ async def register(
         requires_verification=True,
         otp_expires_in_seconds=expire_seconds,
         resend_wait_seconds=cooldown_seconds,
+        otp_state_token=state_token,
         user={
             "id": new_user.id,
             "email": new_user.email,
@@ -313,6 +454,7 @@ async def register(
 async def request_otp(
     data: RequestOTPRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -324,8 +466,12 @@ async def request_otp(
     await ensure_db_initialized()
     norm_email = data.email.strip().lower()
 
-    stmt = select(UserModel).where(UserModel.email == norm_email)
-    user = (await db.execute(stmt)).scalars().first()
+    user, _ = await _rehydrate_from_signed_cookies(
+        db=db,
+        request=request,
+        norm_email=norm_email,
+        explicit_otp_token=data.otp_state_token,
+    )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -338,13 +484,15 @@ async def request_otp(
             detail="Account is deactivated. Please contact support.",
         )
 
-    otp_code, expire_seconds, cooldown_seconds, resend_count = await _issue_account_otp(
+    otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec = await _issue_account_otp(
         db=db,
         email=user.email,
         full_name=user.full_name,
         purpose=data.purpose,
     )
     user.verification_token = otp_code
+    state_token = _build_otp_state_token(user, otp_rec)
+    _set_otp_state_cookie(response, state_token)
     await db.commit()
 
     return OTPDispatchResponse(
@@ -353,6 +501,7 @@ async def request_otp(
         otp_expires_in_seconds=expire_seconds,
         resend_wait_seconds=cooldown_seconds,
         resend_count=resend_count,
+        otp_state_token=state_token,
     )
 
 
@@ -372,8 +521,12 @@ async def verify_otp(
     norm_email = data.email.strip().lower()
     clean_otp = data.otp.strip()
 
-    user_stmt = select(UserModel).where(UserModel.email == norm_email)
-    user = (await db.execute(user_stmt)).scalars().first()
+    user, otp_rec = await _rehydrate_from_signed_cookies(
+        db=db,
+        request=request,
+        norm_email=norm_email,
+        explicit_otp_token=data.otp_state_token,
+    )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -386,8 +539,6 @@ async def verify_otp(
             detail="Account is deactivated. Please contact support.",
         )
 
-    otp_stmt = select(EmailOTPModel).where(EmailOTPModel.email == norm_email)
-    otp_rec = (await db.execute(otp_stmt)).scalars().first()
     if not otp_rec:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -409,6 +560,8 @@ async def verify_otp(
 
     if not secrets.compare_digest(hash_token(clean_otp), otp_rec.otp_hash):
         otp_rec.failed_attempts += 1
+        state_token = _build_otp_state_token(user, otp_rec)
+        _set_otp_state_cookie(response, state_token)
         await db.commit()
         remaining = max(0, settings.OTP_MAX_FAILED_ATTEMPTS - otp_rec.failed_attempts)
         if remaining == 0:
@@ -425,6 +578,7 @@ async def verify_otp(
     user.is_verified = True
     user.verification_token = None
     await db.delete(otp_rec)
+    response.delete_cookie(key=OTP_STATE_COOKIE_NAME, path="/")
 
     access_token = _issue_session_tokens(
         db=db,
@@ -461,8 +615,11 @@ async def login(
     rate_limit(f"login-acct:{norm_email}", limit=30, window_seconds=900)
     await ensure_db_initialized()
 
-    stmt = select(UserModel).where(UserModel.email == norm_email)
-    user = (await db.execute(stmt)).scalars().first()
+    user, _ = await _rehydrate_from_signed_cookies(
+        db=db,
+        request=request,
+        norm_email=norm_email,
+    )
 
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(
@@ -522,7 +679,8 @@ async def refresh_token_endpoint(
 ):
     """
     Exchanges an active refresh token cookie for a new access token and
-    a rotated refresh token. Detects token reuse to revoke compromised sessions.
+    a rotated refresh token. Detects token reuse to revoke compromised sessions,
+    and supports stateless verification across serverless worker cold starts.
     """
     await ensure_db_initialized()
     raw_token = request.cookies.get(REFRESH_COOKIE_NAME)
@@ -536,60 +694,117 @@ async def refresh_token_endpoint(
     stmt = select(RefreshTokenModel).where(RefreshTokenModel.token_hash == hashed)
     token_record = (await db.execute(stmt)).scalars().first()
 
-    if not token_record:
+    if token_record is not None:
+        if token_record.is_revoked:
+            await db.execute(
+                update(RefreshTokenModel)
+                .where(RefreshTokenModel.family_id == token_record.family_id)
+                .values(is_revoked=True)
+            )
+            await db.commit()
+            _clear_refresh_cookie(response)
+            logger.warning(f"Detected reuse of revoked refresh token for user {token_record.user_id}! Revoked token family.")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session security compromise detected. Please sign in again.",
+            )
+
+        now_utc = datetime.now(timezone.utc)
+        rec_expires = _as_utc(token_record.expires_at)
+        if rec_expires < now_utc:
+            token_record.is_revoked = True
+            await db.commit()
+            _clear_refresh_cookie(response)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token expired",
+            )
+
+        user_stmt = select(UserModel).where(UserModel.id == token_record.user_id)
+        user = (await db.execute(user_stmt)).scalars().first()
+        if not user or not user.is_active:
+            token_record.is_revoked = True
+            await db.commit()
+            _clear_refresh_cookie(response)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found or inactive",
+            )
+
+        rec_created = _as_utc(token_record.created_at) if token_record.created_at else now_utc
+        was_remember_me = (rec_expires - rec_created).days > settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS + 1
+
+        token_record.is_revoked = True
+        new_access_token = _issue_session_tokens(
+            db=db,
+            response=response,
+            user=user,
+            remember_me=was_remember_me,
+            family_id=token_record.family_id,
+        )
+        await db.commit()
+        return AuthResponse(
+            access_token=new_access_token,
+            user={
+                "id": user.id,
+                "email": user.email,
+                "name": user.full_name,
+                "role": user.role,
+                "is_verified": bool(user.is_verified),
+            },
+        )
+
+    # Serverless cold-start fallback: verify cryptographically signed refresh JWT
+    refresh_payload = decode_refresh_token(raw_token)
+    if not refresh_payload:
         _clear_refresh_cookie(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token",
         )
 
-    if token_record.is_revoked:
-        await db.execute(
-            update(RefreshTokenModel)
-            .where(RefreshTokenModel.family_id == token_record.family_id)
-            .values(is_revoked=True)
-        )
-        await db.commit()
-        _clear_refresh_cookie(response)
-        logger.warning(f"Detected reuse of revoked refresh token for user {token_record.user_id}! Revoked token family.")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session security compromise detected. Please sign in again.",
-        )
-
-    now_utc = datetime.now(timezone.utc)
-    rec_expires = _as_utc(token_record.expires_at)
-    if rec_expires < now_utc:
-        token_record.is_revoked = True
-        await db.commit()
+    family_id = refresh_payload.get("fam") or uuid.uuid4().hex
+    # If this DB already has records for this family_id, then this missing token hash is invalid
+    fam_exists = (
+        await db.execute(select(RefreshTokenModel.id).where(RefreshTokenModel.family_id == family_id))
+    ).scalars().first()
+    if fam_exists is not None:
         _clear_refresh_cookie(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token expired",
+            detail="Invalid refresh token",
         )
 
-    user_stmt = select(UserModel).where(UserModel.id == token_record.user_id)
-    user = (await db.execute(user_stmt)).scalars().first()
-    if not user or not user.is_active:
-        token_record.is_revoked = True
-        await db.commit()
+    target_email = (refresh_payload.get("email") or "").strip().lower()
+    user = (await db.execute(select(UserModel).where(UserModel.email == target_email))).scalars().first()
+    if not user:
+        user, _ = await _rehydrate_from_signed_cookies(db=db, request=request, norm_email=target_email)
+    if not user:
+        user = UserModel(
+            id=refresh_payload["sub"],
+            email=target_email,
+            hashed_password=hash_password(secrets.token_urlsafe(32)),
+            full_name=refresh_payload.get("name") or target_email.split("@")[0],
+            role=refresh_payload.get("role") or "reviewer",
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(user)
+        await db.flush()
+
+    if not user.is_active:
         _clear_refresh_cookie(response)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
 
-    # Preserve remember_me duration if original token had > 8 days lifespan
-    rec_created = _as_utc(token_record.created_at) if token_record.created_at else now_utc
-    was_remember_me = (rec_expires - rec_created).days > settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS + 1
-
-    token_record.is_revoked = True
     new_access_token = _issue_session_tokens(
         db=db,
         response=response,
         user=user,
-        remember_me=was_remember_me,
-        family_id=token_record.family_id,
+        remember_me=bool(refresh_payload.get("rem", False)),
+        family_id=family_id,
     )
     await db.commit()
 
@@ -648,7 +863,6 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
             detail="Invalid or expired email verification code.",
         )
 
-    # Also check OTP expiry if an EmailOTPModel exists for this user
     otp_stmt = select(EmailOTPModel).where(EmailOTPModel.email == user.email)
     otp_rec = (await db.execute(otp_stmt)).scalars().first()
     if otp_rec:
@@ -667,31 +881,38 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
 
 
 @router.post("/resend-verification")
-async def resend_verification(email: EmailStr, request: Request, db: AsyncSession = Depends(get_db)):
+async def resend_verification(
+    email: EmailStr,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Re-sends a 6-digit verification OTP with progressive cooldown enforcement."""
     rate_limit(f"resend:{client_ip(request)}", limit=20, window_seconds=3600)
     await ensure_db_initialized()
     norm_email = email.strip().lower()
-    stmt = select(UserModel).where(UserModel.email == norm_email)
-    user = (await db.execute(stmt)).scalars().first()
+    user, _ = await _rehydrate_from_signed_cookies(db=db, request=request, norm_email=norm_email)
     if not user:
         return {"message": "If an account exists with this email, a verification code has been sent."}
     if user.is_verified:
         return {"message": "Account is already verified."}
 
-    otp_code, expire_seconds, cooldown_seconds, resend_count = await _issue_account_otp(
+    otp_code, expire_seconds, cooldown_seconds, resend_count, otp_rec = await _issue_account_otp(
         db=db,
         email=user.email,
         full_name=user.full_name,
         purpose="register",
     )
     user.verification_token = otp_code
+    state_token = _build_otp_state_token(user, otp_rec)
+    _set_otp_state_cookie(response, state_token)
     await db.commit()
     return {
         "message": "Verification OTP sent. Please check your inbox.",
         "otp_expires_in_seconds": expire_seconds,
         "resend_wait_seconds": cooldown_seconds,
         "resend_count": resend_count,
+        "otp_state_token": state_token,
     }
 
 

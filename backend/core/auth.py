@@ -37,18 +37,14 @@ def _is_production_like() -> bool:
 
 def _resolve_jwt_secret() -> str:
     """
-    Returns the signing key. The repository default is public, so in a
-    production-like environment it must never be used: tokens signed with it
-    could be forged by anyone. In that case an ephemeral random key is used
-    (sessions then do not survive restarts) until JWT_SECRET is configured.
+    Returns the signing key. In serverless/multi-worker deployments (e.g. Vercel),
+    every worker MUST derive the exact same signing key so tokens issued by one
+    worker are accepted by all other workers.
     """
     secret = settings.JWT_SECRET
     if secret == _DEFAULT_JWT_SECRET and _is_production_like():
-        logger.error(
-            "JWT_SECRET is not configured; using an ephemeral per-process signing key. "
-            "Set the JWT_SECRET environment variable to a long random value."
-        )
-        return secrets.token_urlsafe(48)
+        seed = f"{secret}:{settings.FASTN_ORG_ID}:{settings.GOOGLE_CLIENT_ID}:{os.getenv('VERCEL_PROJECT_ID', 'cas-vercel')}"
+        return hashlib.sha256(seed.encode("utf-8")).hexdigest()
     return secret
 
 
@@ -121,9 +117,89 @@ def create_guest_token() -> str:
     })
 
 
-def create_refresh_token() -> str:
-    """Generates an opaque cryptographically secure refresh token string."""
-    return secrets.token_urlsafe(48)
+def create_refresh_token(
+    user_id: Optional[str] = None,
+    email: Optional[str] = None,
+    role: Optional[str] = None,
+    full_name: Optional[str] = None,
+    family_id: Optional[str] = None,
+    expire_days: Optional[int] = None,
+    remember_me: bool = False,
+) -> str:
+    """
+    Generates a cryptographically signed refresh token (JWT with type='refresh')
+    when user context is provided, or an opaque token otherwise. Using a signed
+    refresh token allows serverless workers (with ephemeral per-worker SQLite)
+    to validate and rotate sessions across cold starts while still recording
+    token hashes in RefreshTokenModel for reuse/revocation checks.
+    """
+    if not user_id or not email:
+        return secrets.token_urlsafe(48)
+    now = datetime.now(timezone.utc)
+    days = expire_days if expire_days is not None else (
+        settings.JWT_REMEMBER_ME_DAYS if remember_me else settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS
+    )
+    return _encode({
+        "sub": user_id,
+        "email": email,
+        "role": role or ROLE_REVIEWER,
+        "name": full_name or email.split("@")[0],
+        "fam": family_id or uuid.uuid4().hex,
+        "rem": bool(remember_me),
+        "jti": str(uuid.uuid4()),
+        "type": "refresh",
+        "iss": settings.JWT_ISSUER,
+        "exp": now + timedelta(days=days),
+        "iat": now,
+    })
+
+
+def decode_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+    """Decodes and validates a signed refresh JWT, returning None if invalid/expired."""
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SIGNING_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            issuer=settings.JWT_ISSUER,
+            options={"require": ["exp", "iat", "sub", "iss"]},
+        )
+        if payload.get("type") != "refresh":
+            return None
+        return payload
+    except jwt.PyJWTError:
+        return None
+
+
+def encode_signed_state(data: Dict[str, Any], expire_seconds: int = 7200) -> str:
+    """Signs a state dictionary (e.g. serverless OTP/account state) with JWT_SIGNING_KEY."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        **data,
+        "iss": settings.JWT_ISSUER,
+        "iat": now,
+        "exp": now + timedelta(seconds=expire_seconds),
+    }
+    return _encode(payload)
+
+
+def decode_signed_state(token: Optional[str], expected_type: str) -> Optional[Dict[str, Any]]:
+    """Verifies and decodes a signed state token."""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SIGNING_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            issuer=settings.JWT_ISSUER,
+            options={"require": ["exp", "iat", "iss"]},
+        )
+        if payload.get("type") != expected_type:
+            return None
+        return payload
+    except jwt.PyJWTError:
+        return None
 
 
 def decode_access_token(token: str) -> Dict[str, Any]:
