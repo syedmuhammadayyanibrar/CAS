@@ -96,7 +96,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
 
     # Google OAuth Settings
-    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_ID: Optional[str] = "853519585394-cqa4lvkg6sonanj128hg7qqmf84vnv3k.apps.googleusercontent.com"
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    GOOGLE_PROJECT_ID: Optional[str] = "robust-heaven-514412-u6"
 
 
 settings = Settings()

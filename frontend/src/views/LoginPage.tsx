@@ -20,12 +20,16 @@ export function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isGuestLoading, setIsGuestLoading] = useState(false);
-  const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  const [googleClientId, setGoogleClientId] = useState<string | null>(
+    "853519585394-cqa4lvkg6sonanj128hg7qqmf84vnv3k.apps.googleusercontent.com"
+  );
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
   // The Google OAuth client ID is served by the backend (no rebuild needed to change it)
   useEffect(() => {
-    fetchAuthConfig().then((cfg) => setGoogleClientId(cfg.google_client_id));
+    fetchAuthConfig().then((cfg) => {
+      if (cfg.google_client_id) setGoogleClientId(cfg.google_client_id);
+    });
   }, []);
 
   // Render Google's official button; Google returns a signed ID token which the
