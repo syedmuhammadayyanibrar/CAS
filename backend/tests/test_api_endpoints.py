@@ -45,3 +45,34 @@ async def test_mesh_analyze_endpoint(test_contract_text):
     assert "director_routing" in data
     assert "risk_report" in data
     assert "compliance_report" in data
+
+
+@pytest.mark.asyncio
+async def test_browser_spa_refresh_and_back_routes():
+    """Browser navigation/refresh requests (Accept: text/html) on SPA paths must serve index.html, not 401/404."""
+    transport = ASGITransport(app=app)
+    browser_headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document",
+    }
+    spa_routes = [
+        "/",
+        "/contracts",
+        "/contracts/CTR-2026-001",
+        "/approvals",
+        "/societies",
+        "/automations",
+        "/memory",
+        "/demo",
+        "/evaluation",
+        "/login",
+        "/ui/contracts/CTR-2026-001",
+    ]
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        for route in spa_routes:
+            res = await ac.get(route, headers=browser_headers)
+            assert res.status_code == 200, f"Expected 200 HTML on {route}, got {res.status_code}"
+            assert "text/html" in res.headers.get("content-type", ""), f"Expected HTML content-type on {route}"
+            assert "<div id=\"root\">" in res.text
+

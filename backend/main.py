@@ -81,15 +81,85 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+import os
+from fastapi import HTTPException
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+
+
+def find_frontend_dist() -> str | None:
+    candidates = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../public")),
+        os.path.abspath("public"),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist")),
+        os.path.abspath("frontend/dist"),
+    ]
+    for p in candidates:
+        if os.path.exists(p) and os.path.exists(os.path.join(p, "index.html")):
+            return p
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    return None
+
+
+frontend_dist = find_frontend_dist()
+
+_SPA_NON_HTML_PREFIXES = (
+    "/api/",
+    "/webhooks/",
+    "/assets/",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/favicon",
+)
+
+
+def _is_browser_spa_request(request: Request) -> bool:
+    """
+    Detects browser document navigation / page refresh / back-forward reload
+    so client-side SPA routes (e.g. /contracts, /contracts/:id, /societies,
+    /approvals, /automations, /memory, /demo, /evaluation) receive index.html
+    instead of hitting root-mounted JSON API endpoints.
+    """
+    if request.method != "GET":
+        return False
+    path = request.url.path
+    if path == "/api" or path.startswith(_SPA_NON_HTML_PREFIXES):
+        return False
+    accept = request.headers.get("accept", "").lower()
+    sec_dest = request.headers.get("sec-fetch-dest", "").lower()
+    sec_mode = request.headers.get("sec-fetch-mode", "").lower()
+    return "text/html" in accept or sec_dest == "document" or sec_mode == "navigate"
+
+
+def _apply_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Vary"] = "Accept"
     return response
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    if _is_browser_spa_request(request) and frontend_dist:
+        req_path = request.url.path.lstrip("/")
+        if req_path:
+            static_candidate = os.path.join(frontend_dist, req_path)
+            if os.path.isfile(static_candidate):
+                return _apply_security_headers(FileResponse(static_candidate))
+        index_file = os.path.join(frontend_dist, "index.html")
+        if os.path.exists(index_file):
+            resp = FileResponse(index_file)
+            resp.headers["Cache-Control"] = "no-cache"
+            return _apply_security_headers(resp)
+
+    response = await call_next(request)
+    return _apply_security_headers(response)
 
 
 # Route mounting.
@@ -116,35 +186,10 @@ for _prefix in ("/api", ""):
     app.include_router(webhooks_router, prefix=_prefix, dependencies=[Depends(verify_webhook_signature)])
 
 
-import os
-from fastapi import Request
-from fastapi.responses import FileResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-
-
-def find_frontend_dist() -> str | None:
-    candidates = [
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "../public")),
-        os.path.abspath("public"),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "../frontend/dist")),
-        os.path.abspath("frontend/dist"),
-    ]
-    for p in candidates:
-        if os.path.exists(p) and os.path.exists(os.path.join(p, "index.html")):
-            return p
-    for p in candidates:
-        if os.path.exists(p):
-            return p
-    return None
-
-
-frontend_dist = find_frontend_dist()
-
-
 @app.get("/")
 async def root(request: Request):
     accept = request.headers.get("accept", "")
-    if accept.startswith("text/html"):
+    if "text/html" in accept.lower():
         if frontend_dist and os.path.exists(os.path.join(frontend_dist, "index.html")):
             return FileResponse(os.path.join(frontend_dist, "index.html"))
         return RedirectResponse(url="/ui", status_code=307)
@@ -192,6 +237,13 @@ if frontend_dist and os.path.exists(frontend_dist):
             return FileResponse(index_file)
         return {"status": "ok"}
 
+    @app.get("/icons.svg")
+    async def serve_icons():
+        icons = os.path.join(frontend_dist, "icons.svg")
+        if os.path.exists(icons):
+            return FileResponse(icons)
+        raise HTTPException(status_code=404, detail="Not Found")
+
     @app.get("/ui")
     @app.get("/ui/")
     async def serve_ui_root():
@@ -209,6 +261,30 @@ if frontend_dist and os.path.exists(frontend_dist):
         if os.path.exists(index_file):
             return FileResponse(index_file)
         return {"status": "Frontend build not found"}
+
+    @app.get("/{full_path:path}")
+    async def serve_root_spa_fallback(full_path: str, request: Request):
+        if full_path == "api" or full_path.startswith(("api/", "webhooks/")):
+            raise HTTPException(status_code=404, detail="Not Found")
+        target = os.path.join(frontend_dist, full_path)
+        if os.path.isfile(target):
+            return FileResponse(target)
+        spa_prefixes = (
+            "contracts",
+            "approvals",
+            "societies",
+            "automations",
+            "memory",
+            "demo",
+            "evaluation",
+            "login",
+        )
+        first_seg = full_path.split("/")[0].lower()
+        if _is_browser_spa_request(request) or first_seg in spa_prefixes:
+            index_file = os.path.join(frontend_dist, "index.html")
+            if os.path.exists(index_file):
+                return FileResponse(index_file)
+        raise HTTPException(status_code=404, detail="Not Found")
 
 
 

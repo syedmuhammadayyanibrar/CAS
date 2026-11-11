@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { LoginPage } from "./views/LoginPage";
 import { Sidebar } from "./components/Sidebar";
@@ -15,6 +15,51 @@ import { MemoryView } from "./views/MemoryView";
 import { DemoWorkspaceView } from "./views/DemoWorkspaceView";
 import { EvaluationCenterView } from "./views/EvaluationCenterView";
 import { fetchReviews } from "./api/client";
+
+class RouteErrorBoundary extends React.Component<
+  { resetKey: string; onReset: () => void; children: React.ReactNode },
+  { hasError: boolean; errorMessage: string }
+> {
+  constructor(props: { resetKey: string; onReset: () => void; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: "" };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMessage: error?.message || "Unexpected rendering error" };
+  }
+
+  componentDidUpdate(prevProps: { resetKey: string }) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false, errorMessage: "" });
+    }
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 max-w-xl mx-auto">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xs text-center space-y-3">
+            <h2 className="text-sm font-semibold text-slate-900">Unable to render this view</h2>
+            <p className="text-xs text-slate-500">{this.state.errorMessage}</p>
+            <div className="pt-2 flex items-center justify-center gap-2">
+              <button
+                onClick={() => {
+                  this.setState({ hasError: false, errorMessage: "" });
+                  this.props.onReset();
+                }}
+                className="px-3.5 py-1.5 rounded-md text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+              >
+                Return to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function AppLayout() {
   const { isAuthenticated, isLoading, isGuest } = useAuth();
@@ -46,6 +91,17 @@ function AppLayout() {
   useEffect(() => {
     setIsSidebarOpen(false);
   }, [location.pathname]);
+
+  const handleBack = () => {
+    const idx = typeof window !== "undefined" ? window.history.state?.idx : 0;
+    if (typeof idx === "number" && idx > 0) {
+      navigate(-1);
+    } else if (location.pathname.startsWith("/contracts/")) {
+      navigate("/contracts");
+    } else {
+      navigate("/");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -129,19 +185,24 @@ function AppLayout() {
           onNewContract={() => setIsModalOpen(true)}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           isSidebarOpen={isSidebarOpen}
+          onBack={location.pathname !== "/" ? handleBack : undefined}
         />
         <main className="flex-1 pb-12 overflow-y-auto">
-          <Routes>
-            <Route path="/" element={<DashboardView />} />
-            <Route path="/contracts" element={<PortfolioView />} />
-            <Route path="/contracts/:id" element={<ContractWorkspaceView />} />
-            <Route path="/approvals" element={<ApprovalsView />} />
-            <Route path="/societies" element={<SocietiesView />} />
-            <Route path="/automations" element={<AutomationsView />} />
-            <Route path="/memory" element={<MemoryView />} />
-            <Route path="/demo" element={<DemoWorkspaceView />} />
-            <Route path="/evaluation" element={<EvaluationCenterView />} />
-          </Routes>
+          <RouteErrorBoundary resetKey={location.pathname} onReset={() => navigate("/")}>
+            <Routes>
+              <Route path="/" element={<DashboardView />} />
+              <Route path="/contracts" element={<PortfolioView />} />
+              <Route path="/contracts/:id" element={<ContractWorkspaceView />} />
+              <Route path="/approvals" element={<ApprovalsView />} />
+              <Route path="/societies" element={<SocietiesView />} />
+              <Route path="/automations" element={<AutomationsView />} />
+              <Route path="/memory" element={<MemoryView />} />
+              <Route path="/demo" element={<DemoWorkspaceView />} />
+              <Route path="/evaluation" element={<EvaluationCenterView />} />
+              <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </RouteErrorBoundary>
         </main>
       </div>
 

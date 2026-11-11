@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Menu, X, LogOut, Shield, User, Sparkles } from "lucide-react";
+import { Plus, Menu, X, LogOut, Shield, User, Sparkles, ArrowLeft } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 interface HeaderProps {
@@ -8,6 +8,7 @@ interface HeaderProps {
   onNewContract?: () => void;
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
+  onBack?: () => void;
   actions?: React.ReactNode;
 }
 
@@ -17,6 +18,7 @@ export function Header({
   onNewContract,
   onToggleSidebar,
   isSidebarOpen,
+  onBack,
   actions,
 }: HeaderProps) {
   const { user, isGuest, logout } = useAuth();
@@ -39,6 +41,18 @@ export function Header({
             <span className="text-xs font-semibold select-none">
               {isSidebarOpen ? "Close" : "Menu"}
             </span>
+          </button>
+        )}
+
+        {onBack && (
+          <button
+            onClick={onBack}
+            aria-label="Go back"
+            title="Go back to previous page"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 hover:text-blue-600 transition-all shadow-2xs cursor-pointer group shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4 text-slate-500 group-hover:text-blue-600 transition-colors" />
+            <span className="text-xs font-semibold select-none hidden sm:inline">Back</span>
           </button>
         )}
 

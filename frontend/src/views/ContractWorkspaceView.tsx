@@ -184,7 +184,7 @@ export function ContractWorkspaceView() {
   }
 
   const stages = ["INTAKE", "ANALYZED", "APPROVED", "SIGNED", "ACTIVE"];
-  const currentStageIndex = stages.indexOf(contract.status.toUpperCase());
+  const currentStageIndex = stages.indexOf((contract.status || "INTAKE").toUpperCase());
 
   const tabs: Array<{ key: TabKey; label: string; icon: any; count?: number }> = [
     { key: "overview", label: "Overview", icon: FileText },
@@ -233,12 +233,21 @@ export function ContractWorkspaceView() {
       {/* Top Navigation & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Link
-            to="/contracts"
-            className="p-1.5 rounded-md bg-white border border-[#E5E7EB] text-slate-600 hover:text-slate-900 transition-colors shadow-2xs"
+          <button
+            type="button"
+            onClick={() => {
+              const idx = typeof window !== "undefined" ? window.history.state?.idx : 0;
+              if (typeof idx === "number" && idx > 0) {
+                navigate(-1);
+              } else {
+                navigate("/contracts");
+              }
+            }}
+            aria-label="Back to previous page"
+            className="p-1.5 rounded-md bg-white border border-[#E5E7EB] text-slate-600 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-          </Link>
+          </button>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-bold text-[#111827]">{contract.title}</h1>
@@ -455,11 +464,11 @@ export function ContractWorkspaceView() {
                   Contract Document Source (Verbatim Text)
                 </h3>
                 <span className="text-[11px] font-mono text-slate-500">
-                  {contract.raw_text.length} characters
+                  {(contract.raw_text || "").length} characters
                 </span>
               </div>
               <pre className="p-4 rounded-lg bg-slate-50 font-mono text-xs text-slate-800 leading-relaxed overflow-x-auto max-h-[400px] border border-slate-200 whitespace-pre-wrap">
-                {contract.raw_text}
+                {contract.raw_text || "No contract text available."}
               </pre>
             </div>
           </div>

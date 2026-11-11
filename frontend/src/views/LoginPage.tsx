@@ -57,12 +57,35 @@ async function storeBrowserCredentials(email: string, password: string, name?: s
   }
 }
 
+const LOGIN_FLOW_STORAGE_KEY = "cas_login_flow_state";
+
+function loadSavedLoginFlow(): {
+  tab?: "login" | "register";
+  otpStep?: boolean;
+  email?: string;
+  otpPurpose?: "login" | "register";
+  otpExpiresAt?: number;
+  resendReadyAt?: number;
+  resendCount?: number;
+  successNotice?: string | null;
+} {
+  try {
+    const raw = sessionStorage.getItem(LOGIN_FLOW_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
 export function LoginPage() {
   const { login, register, requestOtp, verifyOtp, loginWithGoogle, loginAsGuest } = useAuth();
-  const [tab, setTab] = useState<"login" | "register">("login");
+  const savedFlow = loadSavedLoginFlow();
+  const [tab, setTab] = useState<"login" | "register">(() => savedFlow.tab || "login");
   const [loginMethod, setLoginMethod] = useState<"password" | "otp">("password");
 
   const [email, setEmail] = useState(() => {
+    if (savedFlow.email) return savedFlow.email;
     try {
       return localStorage.getItem(REMEMBERED_EMAIL_KEY) || "";
     } catch {
@@ -75,15 +98,36 @@ export function LoginPage() {
   const [fullName, setFullName] = useState("");
 
   // OTP Verification State
-  const [otpStep, setOtpStep] = useState(false);
+  const [otpStep, setOtpStep] = useState<boolean>(() => {
+    if (savedFlow.otpStep && savedFlow.otpExpiresAt) {
+      return savedFlow.otpExpiresAt > Date.now();
+    }
+    return false;
+  });
   const [otpCode, setOtpCode] = useState("");
-  const [otpPurpose, setOtpPurpose] = useState<"login" | "register">("register");
-  const [otpExpiresIn, setOtpExpiresIn] = useState(300); // 5 minutes (300s)
-  const [resendWaitIn, setResendWaitIn] = useState(120); // 2 minutes initial (120s)
-  const [resendCount, setResendCount] = useState(1);
+  const [otpPurpose, setOtpPurpose] = useState<"login" | "register">(
+    () => savedFlow.otpPurpose || "register"
+  );
+  const [otpExpiresIn, setOtpExpiresIn] = useState(() => {
+    if (savedFlow.otpExpiresAt) {
+      const rem = Math.floor((savedFlow.otpExpiresAt - Date.now()) / 1000);
+      return rem > 0 ? rem : 0;
+    }
+    return 300;
+  }); // 5 minutes (300s)
+  const [resendWaitIn, setResendWaitIn] = useState(() => {
+    if (savedFlow.resendReadyAt) {
+      const rem = Math.floor((savedFlow.resendReadyAt - Date.now()) / 1000);
+      return rem > 0 ? rem : 0;
+    }
+    return 120;
+  }); // 2 minutes initial (120s)
+  const [resendCount, setResendCount] = useState(() => savedFlow.resendCount || 1);
 
   const [error, setError] = useState<string | null>(null);
-  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const [successNotice, setSuccessNotice] = useState<string | null>(
+    () => (savedFlow.otpStep ? savedFlow.successNotice || null : null)
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
@@ -98,6 +142,47 @@ export function LoginPage() {
       if (cfg.google_client_id) setGoogleClientId(cfg.google_client_id);
     });
   }, []);
+
+  // Persist active login/register/OTP step in sessionStorage so page refresh keeps state intact
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        LOGIN_FLOW_STORAGE_KEY,
+        JSON.stringify({
+          tab,
+          otpStep,
+          email,
+          otpPurpose,
+          otpExpiresAt: otpStep ? Date.now() + otpExpiresIn * 1000 : undefined,
+          resendReadyAt: otpStep ? Date.now() + resendWaitIn * 1000 : undefined,
+          resendCount,
+          successNotice,
+        })
+      );
+    } catch {}
+  }, [tab, otpStep, email, otpPurpose, otpExpiresIn, resendWaitIn, resendCount, successNotice]);
+
+  // Sync browser Back/Forward buttons with OTP step and Login/Register tabs
+  useEffect(() => {
+    const onPopState = (ev: PopStateEvent) => {
+      const st = ev.state;
+      if (st && typeof st.casOtpStep === "boolean") {
+        setOtpStep(st.casOtpStep);
+        if (st.casTab === "login" || st.casTab === "register") {
+          setTab(st.casTab);
+        }
+        setError(null);
+      } else if (otpStep) {
+        setOtpStep(false);
+        setError(null);
+      } else if (tab === "register") {
+        setTab("login");
+        setError(null);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [otpStep, tab]);
 
   // Countdown tick for OTP 5-minute validity and progressive resend wait timer
   useEffect(() => {
@@ -177,6 +262,9 @@ export function LoginPage() {
           setOtpExpiresIn(otpRes.otp_expires_in_seconds || 300);
           setResendWaitIn(otpRes.resend_wait_seconds || 120);
           setResendCount(otpRes.resend_count || 1);
+          try {
+            window.history.pushState({ ...(window.history.state || {}), casTab: tab, casOtpStep: true }, "");
+          } catch {}
           setOtpStep(true);
           setSuccessNotice(
             otpRes.fallback_otp_code
@@ -184,6 +272,7 @@ export function LoginPage() {
               : `A 6-digit verification code has been sent to ${email} via Resend.`
           );
         } else {
+          try { sessionStorage.removeItem(LOGIN_FLOW_STORAGE_KEY); } catch {}
           await login(email, password, rememberMe);
           await storeBrowserCredentials(email, password);
         }
@@ -196,12 +285,17 @@ export function LoginPage() {
           setOtpExpiresIn(res.otp_expires_in_seconds || 300);
           setResendWaitIn(res.resend_wait_seconds || 120);
           setResendCount(1);
+          try {
+            window.history.pushState({ ...(window.history.state || {}), casTab: tab, casOtpStep: true }, "");
+          } catch {}
           setOtpStep(true);
           setSuccessNotice(
             res.fallback_otp_code
               ? `Account created! Verification code for ${email}: ${res.fallback_otp_code}`
               : `Account created! Enter the 6-digit OTP sent to ${email} to verify your email and sign in.`
           );
+        } else {
+          try { sessionStorage.removeItem(LOGIN_FLOW_STORAGE_KEY); } catch {}
         }
       }
     } catch (err: any) {
@@ -229,6 +323,7 @@ export function LoginPage() {
     setIsSubmitting(true);
     try {
       await verifyOtp(email, otpCode.trim(), rememberMe);
+      try { sessionStorage.removeItem(LOGIN_FLOW_STORAGE_KEY); } catch {}
     } catch (err: any) {
       setError(err?.message || "Invalid or expired OTP code.");
     } finally {
@@ -297,7 +392,11 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setOtpStep(false);
+                    if (window.history.state?.casOtpStep) {
+                      window.history.back();
+                    } else {
+                      setOtpStep(false);
+                    }
                     setError(null);
                     setSuccessNotice(null);
                   }}
@@ -414,6 +513,11 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (tab !== "login") {
+                      try {
+                        window.history.pushState({ ...(window.history.state || {}), casTab: "login", casOtpStep: false }, "");
+                      } catch {}
+                    }
                     setTab("login");
                     setError(null);
                     setSuccessNotice(null);
@@ -429,6 +533,11 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (tab !== "register") {
+                      try {
+                        window.history.pushState({ ...(window.history.state || {}), casTab: "register", casOtpStep: false }, "");
+                      } catch {}
+                    }
                     setTab("register");
                     setError(null);
                     setSuccessNotice(null);

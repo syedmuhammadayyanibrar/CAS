@@ -30,11 +30,11 @@ export function PortfolioView() {
 
   const filtered = contracts.filter((c) => {
     const matchesSearch =
-      c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.id.toLowerCase().includes(search.toLowerCase()) ||
+      (c.title || "").toLowerCase().includes(search.toLowerCase()) ||
+      (c.id || "").toLowerCase().includes(search.toLowerCase()) ||
       (c.counterparty && c.counterparty.toLowerCase().includes(search.toLowerCase()));
 
-    const matchesStatus = statusFilter === "ALL" || c.status.toUpperCase() === statusFilter;
+    const matchesStatus = statusFilter === "ALL" || (c.status || "").toUpperCase() === statusFilter;
 
     let matchesRisk = true;
     if (riskFilter === "HIGH") {

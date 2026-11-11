@@ -2,6 +2,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+const spaBypass = {
+  target: 'http://localhost:8000',
+  bypass(req: any) {
+    if (req.headers?.accept?.includes('text/html')) {
+      return '/index.html'
+    }
+  },
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -11,17 +20,19 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/contracts': 'http://localhost:8000',
-      '/systems': 'http://localhost:8000',
-      '/mesh': 'http://localhost:8000',
+      '/api': 'http://localhost:8000',
       '/webhooks': 'http://localhost:8000',
-      '/events': 'http://localhost:8000',
-      '/audit': 'http://localhost:8000',
-      '/reviews': 'http://localhost:8000',
-      '/memory': 'http://localhost:8000',
-      '/dashboard': 'http://localhost:8000',
-      '/automations': 'http://localhost:8000',
-      '/demo': 'http://localhost:8000',
+      '/contracts': spaBypass,
+      '/systems': spaBypass,
+      '/mesh': spaBypass,
+      '/events': spaBypass,
+      '/audit': spaBypass,
+      '/reviews': spaBypass,
+      '/memory': spaBypass,
+      '/dashboard': spaBypass,
+      '/automations': spaBypass,
+      '/demo': spaBypass,
+      '/evaluation': spaBypass,
     }
   }
 })

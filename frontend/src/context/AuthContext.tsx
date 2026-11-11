@@ -3,6 +3,7 @@ import {
   AuthUser,
   OTPDispatchResponse,
   getStoredAccessToken,
+  getStoredUserFromToken,
   setStoredAccessToken,
   apiLogin,
   apiRegister,
@@ -53,8 +54,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const PROACTIVE_REFRESH_INTERVAL_MS = 12 * 60 * 1000;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredUserFromToken());
+  const [isLoading, setIsLoading] = useState<boolean>(() => !getStoredUserFromToken());
 
   // Any API call that ends in an unrecoverable 401 returns the user to the login screen
   useEffect(() => {
@@ -65,28 +66,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Initialize session on mount
   useEffect(() => {
+    let cancelled = false;
     async function initAuth() {
       try {
         const token = getStoredAccessToken();
         if (token) {
           const profile = await fetchCurrentUser();
-          setUser(profile);
+          if (!cancelled) setUser(profile);
         } else {
           // Attempt silent refresh via HttpOnly refresh cookie
           const newToken = await refreshAccessToken();
           if (newToken) {
             const profile = await fetchCurrentUser();
-            setUser(profile);
+            if (!cancelled) setUser(profile);
+          } else if (!cancelled) {
+            setUser(null);
           }
         }
-      } catch {
-        setStoredAccessToken(null);
-        setUser(null);
+      } catch (err: any) {
+        if (!cancelled) {
+          const fallbackUser = getStoredUserFromToken();
+          if (!fallbackUser || err?.message === "Unauthenticated") {
+            setStoredAccessToken(null);
+            setUser(null);
+          }
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
     initAuth();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Proactive background refresh timer for authenticated non-guest sessions

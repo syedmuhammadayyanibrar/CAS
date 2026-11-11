@@ -321,6 +321,26 @@ export function setStoredAccessToken(token: string | null) {
   } catch {}
 }
 
+export function getStoredUserFromToken(): AuthUser | null {
+  const token = getStoredAccessToken();
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (!payload.sub || !payload.role) return null;
+    return {
+      id: String(payload.sub),
+      email: String(payload.email || `${payload.sub}@cas.local`),
+      name: payload.name ? String(payload.name) : undefined,
+      role: String(payload.role),
+      is_verified: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function getOtpStateToken(): string | null {
   if (inMemoryOtpStateToken) return inMemoryOtpStateToken;
   try {
@@ -634,28 +654,88 @@ export async function fetchCurrentUser(): Promise<AuthUser> {
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
-  const res = await authFetch(`${API_BASE}/dashboard/summary`);
+  const res = await authFetch(`${API_BASE}/api/dashboard/summary`);
   if (!res.ok) throw new Error("Failed to load dashboard summary");
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data?.recent_contracts)) {
+    for (const c of data.recent_contracts) {
+      if (c?.id) {
+        try {
+          const existing = localStorage.getItem(`cas_contract_${c.id}`);
+          if (!existing) {
+            localStorage.setItem(`cas_contract_${c.id}`, JSON.stringify({
+              id: c.id,
+              title: c.title || c.id,
+              raw_text: c.raw_text || "",
+              status: c.status || "INTAKE",
+              effective_date: c.effective_date,
+            }));
+          }
+        } catch {}
+      }
+    }
+  }
+  return data;
 }
 
 export async function fetchContracts(): Promise<ContractSummary[]> {
-  const res = await authFetch(`${API_BASE}/contracts`);
+  const res = await authFetch(`${API_BASE}/api/contracts`);
   if (!res.ok) throw new Error("Failed to fetch contracts");
-  return res.json();
+  const list = await res.json();
+  if (Array.isArray(list)) {
+    for (const c of list) {
+      if (c?.id) {
+        try {
+          const existing = localStorage.getItem(`cas_contract_${c.id}`);
+          if (!existing) {
+            localStorage.setItem(`cas_contract_${c.id}`, JSON.stringify({
+              id: c.id,
+              title: c.title || c.id,
+              raw_text: (c as any).raw_text || "",
+              status: c.status || "INTAKE",
+              effective_date: c.effective_date,
+            }));
+          }
+        } catch {}
+      }
+    }
+  }
+  return list;
 }
 
 export async function fetchContractDetail(id: string): Promise<ContractDetail> {
   try {
-    const res = await authFetch(`${API_BASE}/contracts/${id}`);
-    if (res.ok) return await res.json();
+    const res = await authFetch(`${API_BASE}/api/contracts/${id}`);
+    if (res.ok) {
+      const detail = await res.json();
+      if (detail?.id) {
+        try {
+          localStorage.setItem(`cas_contract_${id}`, JSON.stringify({
+            id: detail.id,
+            title: detail.title || id,
+            raw_text: detail.raw_text || "",
+            status: detail.status || "INTAKE",
+            effective_date: detail.effective_date,
+            metadata: detail.metadata,
+          }));
+        } catch {}
+      }
+      return detail;
+    }
   } catch {}
 
   // Fallback to client local cache for serverless environments
   const cached = localStorage.getItem(`cas_contract_${id}`);
   if (cached) {
     try {
-      return JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      return {
+        ...parsed,
+        id: parsed.id || id,
+        title: parsed.title || id,
+        raw_text: parsed.raw_text || "",
+        status: parsed.status || "INTAKE",
+      };
     } catch {}
   }
   throw new Error(`Failed to fetch contract ${id}`);
@@ -671,7 +751,7 @@ export async function fetchContractAnalysis(id: string): Promise<FullAnalysis> {
   }
 
   try {
-    const res = await authFetch(`${API_BASE}/contracts/${id}/analysis`);
+    const res = await authFetch(`${API_BASE}/api/contracts/${id}/analysis`);
     if (res.ok) {
       const remote = await res.json();
       if (remote && (remote.graph || remote.risk_report || remote.obligation_schedule)) {
@@ -712,7 +792,7 @@ export async function triggerMeshAnalysis(id: string, objective?: string, contra
     }
   }
 
-  const res = await authFetch(`${API_BASE}/contracts/${id}/analyze`, {
+  const res = await authFetch(`${API_BASE}/api/contracts/${id}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -735,7 +815,7 @@ export async function triggerMeshAnalysis(id: string, objective?: string, contra
 }
 
 export async function uploadContract(title: string, content: string, metadata?: any): Promise<any> {
-  const res = await authFetch(`${API_BASE}/contracts`, {
+  const res = await authFetch(`${API_BASE}/api/contracts`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title, content, metadata }),
@@ -776,10 +856,10 @@ export async function uploadContractDocument(file: File, createContract: boolean
     console.warn("FileReader failed, will try multipart:", readErr);
   }
 
-  // 2. Try JSON base64 extraction via /contracts/extract-text (zero multipart dependency)
+  // 2. Try JSON base64 extraction via /api/contracts/extract-text (zero multipart dependency)
   if (base64Data) {
     try {
-      const jsonRes = await authFetch(`${API_BASE}/contracts/extract-text`, {
+      const jsonRes = await authFetch(`${API_BASE}/api/contracts/extract-text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -795,12 +875,12 @@ export async function uploadContractDocument(file: File, createContract: boolean
     }
   }
 
-  // 3. Fallback: multipart /contracts/upload-document
+  // 3. Fallback: multipart /api/contracts/upload-document
   const formData = new FormData();
   formData.append("file", file);
   formData.append("create_contract", String(createContract));
 
-  const res = await authFetch(`${API_BASE}/contracts/upload-document`, {
+  const res = await authFetch(`${API_BASE}/api/contracts/upload-document`, {
     method: "POST",
     body: formData,
   });
@@ -812,7 +892,7 @@ export async function uploadContractDocument(file: File, createContract: boolean
 }
 
 export async function fetchGoogleDriveFiles(): Promise<GoogleDriveFile[]> {
-  const res = await authFetch(`${API_BASE}/automations/google-drive/files`);
+  const res = await authFetch(`${API_BASE}/api/automations/google-drive/files`);
   if (!res.ok) throw new Error("Failed to list Google Drive files");
   return res.json();
 }
@@ -822,7 +902,7 @@ export async function importGoogleDriveDocument(
   customUrl?: string,
   autoCreateContract: boolean = false
 ): Promise<GoogleDriveImportResult> {
-  const res = await authFetch(`${API_BASE}/automations/google-drive/import`, {
+  const res = await authFetch(`${API_BASE}/api/automations/google-drive/import`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -858,7 +938,7 @@ export async function signContract(
   }
 
   const eff = effectiveDate || "2026-10-01";
-  const res = await authFetch(`${API_BASE}/contracts/${id}/sign?effective_date=${encodeURIComponent(eff)}`, {
+  const res = await authFetch(`${API_BASE}/api/contracts/${id}/sign?effective_date=${encodeURIComponent(eff)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -909,7 +989,7 @@ export async function askContractQuestion(
     }
   }
 
-  const res = await authFetch(`${API_BASE}/contracts/${id}/ask`, {
+  const res = await authFetch(`${API_BASE}/api/contracts/${id}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, contract_text: text, title: t }),
@@ -922,14 +1002,14 @@ export async function askContractQuestion(
 }
 
 export async function fetchReviews(status?: string): Promise<HumanReview[]> {
-  const url = status ? `${API_BASE}/reviews?status=${status}` : `${API_BASE}/reviews`;
+  const url = status ? `${API_BASE}/api/reviews?status=${status}` : `${API_BASE}/api/reviews`;
   const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch reviews");
   return res.json();
 }
 
 export async function resolveReview(reviewId: string, decision: string, reviewerId: string, decisionNotes: string): Promise<any> {
-  const res = await authFetch(`${API_BASE}/reviews/${reviewId}/resolve`, {
+  const res = await authFetch(`${API_BASE}/api/reviews/${reviewId}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ decision, reviewer_id: reviewerId, decision_notes: decisionNotes }),
@@ -939,13 +1019,13 @@ export async function resolveReview(reviewId: string, decision: string, reviewer
 }
 
 export async function fetchAutomations(): Promise<{ org_id: string; workflows: FastnWorkflow[] }> {
-  const res = await authFetch(`${API_BASE}/automations`);
+  const res = await authFetch(`${API_BASE}/api/automations`);
   if (!res.ok) throw new Error("Failed to fetch automations");
   return res.json();
 }
 
 export async function executeAutomation(slug: string, payload?: any): Promise<any> {
-  const res = await authFetch(`${API_BASE}/automations/${slug}/execute`, {
+  const res = await authFetch(`${API_BASE}/api/automations/${slug}/execute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ payload }),
@@ -957,7 +1037,7 @@ export async function executeAutomation(slug: string, payload?: any): Promise<an
 export async function runStandaloneSociety(systemSlug: string, payload: any): Promise<any> {
   // Normalize slug to match route (e.g. "contract_intelligence" -> "contract-intelligence")
   const routeSlug = systemSlug.replace(/_/g, "-");
-  const res = await authFetch(`${API_BASE}/systems/${routeSlug}/analyze`, {
+  const res = await authFetch(`${API_BASE}/api/systems/${routeSlug}/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -980,7 +1060,7 @@ export async function fetchFastnExecutions(params?: {
   if (params?.workflow_slug) q.append("workflow_slug", params.workflow_slug);
   if (params?.status) q.append("status", params.status);
   if (params?.direction) q.append("direction", params.direction);
-  const res = await authFetch(`${API_BASE}/automations/executions?${q.toString()}`);
+  const res = await authFetch(`${API_BASE}/api/automations/executions?${q.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch Fastn executions");
   return res.json();
 }
@@ -990,13 +1070,13 @@ export async function fetchMemories(tags?: string, type?: string): Promise<{ mem
   const params = new URLSearchParams();
   if (tags) params.append("tags", tags);
   if (type) params.append("memory_type", type);
-  const res = await authFetch(`${API_BASE}/memory?${params.toString()}`);
+  const res = await authFetch(`${API_BASE}/api/memory?${params.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch memories");
   return res.json();
 }
 
 export async function resetDemo(): Promise<any> {
-  const res = await authFetch(`${API_BASE}/demo/reset`, { method: "POST" });
+  const res = await authFetch(`${API_BASE}/api/demo/reset`, { method: "POST" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}: Reset failed` }));
     throw new Error(err.detail || `Failed to reset demo (status ${res.status})`);
@@ -1005,7 +1085,7 @@ export async function resetDemo(): Promise<any> {
 }
 
 export async function runDemoStep(step: number): Promise<any> {
-  const res = await authFetch(`${API_BASE}/demo/run-step`, {
+  const res = await authFetch(`${API_BASE}/api/demo/run-step`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ step }),
@@ -1018,7 +1098,7 @@ export async function runDemoStep(step: number): Promise<any> {
 }
 
 export async function fetchEvents(contractId?: string): Promise<any[]> {
-  const url = contractId ? `${API_BASE}/events?contract_id=${contractId}` : `${API_BASE}/events`;
+  const url = contractId ? `${API_BASE}/api/events?contract_id=${contractId}` : `${API_BASE}/api/events`;
   const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch events");
   return res.json();
@@ -1093,13 +1173,13 @@ export interface ActiveOperation {
 }
 
 export async function fetchContractExecution(contractId: string): Promise<ContractExecutionState> {
-  const res = await authFetch(`${API_BASE}/contracts/${contractId}/execution`);
+  const res = await authFetch(`${API_BASE}/api/contracts/${contractId}/execution`);
   if (!res.ok) throw new Error(`Failed to fetch execution for ${contractId}`);
   return res.json();
 }
 
 export async function fetchActiveOperations(): Promise<ActiveOperation[]> {
-  const res = await authFetch(`${API_BASE}/dashboard/active-operations`);
+  const res = await authFetch(`${API_BASE}/api/dashboard/active-operations`);
   if (!res.ok) throw new Error("Failed to fetch active operations");
   return res.json();
 }
@@ -1114,7 +1194,7 @@ export function subscribeContractExecution(
   // Authenticated SSE over fetch (EventSource cannot send an Authorization header).
   (async () => {
     try {
-      const res = await authFetch(`${API_BASE}/contracts/${contractId}/execution-stream`, {
+      const res = await authFetch(`${API_BASE}/api/contracts/${contractId}/execution-stream`, {
         headers: { Accept: "text/event-stream" },
         signal: abort.signal,
       });
@@ -1288,21 +1368,21 @@ export interface EvaluationRunHistoryItem {
 }
 
 export async function fetchEvaluationSummary(runId?: string): Promise<EvaluationSummary> {
-  const url = runId ? `${API_BASE}/evaluation/summary?run_id=${encodeURIComponent(runId)}` : `${API_BASE}/evaluation/summary`;
+  const url = runId ? `${API_BASE}/api/evaluation/summary?run_id=${encodeURIComponent(runId)}` : `${API_BASE}/api/evaluation/summary`;
   const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch evaluation summary");
   return res.json();
 }
 
 export async function fetchEvaluationCases(category?: string): Promise<EvaluationCaseItem[]> {
-  const url = category && category !== "all" ? `${API_BASE}/evaluation/cases?category=${encodeURIComponent(category)}` : `${API_BASE}/evaluation/cases`;
+  const url = category && category !== "all" ? `${API_BASE}/api/evaluation/cases?category=${encodeURIComponent(category)}` : `${API_BASE}/api/evaluation/cases`;
   const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch evaluation cases");
   return res.json();
 }
 
 export async function fetchEvaluationCaseDetail(caseId: string): Promise<any> {
-  const res = await authFetch(`${API_BASE}/evaluation/cases/${encodeURIComponent(caseId)}`);
+  const res = await authFetch(`${API_BASE}/api/evaluation/cases/${encodeURIComponent(caseId)}`);
   if (!res.ok) throw new Error(`Failed to fetch case ${caseId}`);
   return res.json();
 }
@@ -1313,7 +1393,7 @@ export async function runEvaluation(options?: {
   case_id?: string;
   async_execution?: boolean;
 }): Promise<{ summary: EvaluationSummary; results: EvaluationResultItem[] }> {
-  const res = await authFetch(`${API_BASE}/evaluation/run`, {
+  const res = await authFetch(`${API_BASE}/api/evaluation/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -1328,7 +1408,7 @@ export async function runEvaluation(options?: {
 }
 
 export async function runSingleEvaluationCase(caseId: string): Promise<EvaluationResultItem> {
-  const res = await authFetch(`${API_BASE}/evaluation/run/${encodeURIComponent(caseId)}`, {
+  const res = await authFetch(`${API_BASE}/api/evaluation/run/${encodeURIComponent(caseId)}`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(`Failed to run evaluation for case ${caseId}`);
@@ -1344,7 +1424,7 @@ export async function fetchEvaluationResults(params?: {
   if (params?.run_id) q.append("run_id", params.run_id);
   if (params?.category && params.category !== "all") q.append("category", params.category);
   if (params?.status && params.status !== "all") q.append("status_filter", params.status);
-  const res = await authFetch(`${API_BASE}/evaluation/results?${q.toString()}`);
+  const res = await authFetch(`${API_BASE}/api/evaluation/results?${q.toString()}`);
   if (!res.ok) throw new Error("Failed to fetch evaluation results");
   return res.json();
 }
@@ -1354,14 +1434,14 @@ export async function fetchEvaluationFailures(runId?: string): Promise<{
   failures: any[];
   grouped_by_society: Record<string, any[]>;
 }> {
-  const url = runId ? `${API_BASE}/evaluation/failures?run_id=${encodeURIComponent(runId)}` : `${API_BASE}/evaluation/failures`;
+  const url = runId ? `${API_BASE}/api/evaluation/failures?run_id=${encodeURIComponent(runId)}` : `${API_BASE}/api/evaluation/failures`;
   const res = await authFetch(url);
   if (!res.ok) throw new Error("Failed to fetch evaluation failures");
   return res.json();
 }
 
 export async function fetchEvaluationRuns(): Promise<EvaluationRunHistoryItem[]> {
-  const res = await authFetch(`${API_BASE}/evaluation/runs`);
+  const res = await authFetch(`${API_BASE}/api/evaluation/runs`);
   if (!res.ok) throw new Error("Failed to fetch evaluation runs");
   return res.json();
 }
@@ -1373,7 +1453,7 @@ export async function fetchEvaluationRunDetail(runId: string): Promise<{
   metrics: EvaluationSummary;
   cases: EvaluationResultItem[];
 }> {
-  const res = await authFetch(`${API_BASE}/evaluation/runs/${encodeURIComponent(runId)}`);
+  const res = await authFetch(`${API_BASE}/api/evaluation/runs/${encodeURIComponent(runId)}`);
   if (!res.ok) throw new Error(`Failed to fetch run ${runId}`);
   return res.json();
 }
